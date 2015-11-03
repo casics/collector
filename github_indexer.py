@@ -54,7 +54,7 @@ from reporecord import *
 # .............................................................................
 
 class GitHubIndexer():
-    _max_failures   = 5
+    _max_failures   = 10
 
     def __init__(self):
         cfg = Config()
