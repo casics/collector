@@ -10,10 +10,9 @@
 # Inventory Creation System.  For more information, visit http://casics.org.
 # ------------------------------------------------------------------------- -->
 
-from reporecord import *
-from utils import *
-
+import pdb
 import sys
+import os
 import requests
 import json
 import http
@@ -27,7 +26,10 @@ from BTrees.OOBTree import BTree
 from datetime import datetime
 from time import time, sleep
 
-import pdb
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from common import *
+
+from reporecord import *
 
 
 # Summary

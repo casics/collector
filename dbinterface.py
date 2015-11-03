@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.4
 #
-# @file    database.py
+# @file    dbinterface.py
 # @brief   Database encapsulation.
 # @author  Michael Hucka
 #
@@ -10,6 +10,8 @@
 # Inventory Creation System.  For more information, visit http://casics.org.
 # ------------------------------------------------------------------------- -->
 
+import sys
+import os
 import persistent
 import transaction
 import ZODB
@@ -17,7 +19,8 @@ from ZEO.ClientStorage import ClientStorage
 from ZODB import FileStorage, DB
 from BTrees.OOBTree import BTree
 
-from utils import *
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from common import *
 
 
 class Database:

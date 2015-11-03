@@ -12,15 +12,18 @@
 
 import pdb
 import sys
+import os
 import plac
 import operator
 from datetime import datetime
 from time import sleep
 from timeit import default_timer as timer
 
-from database import *
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from common import *
+
+from dbinterface import *
 from reporecord import *
-from utils import *
 from github_indexer import GitHubIndexer
 
 
