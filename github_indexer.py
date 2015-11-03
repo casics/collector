@@ -34,23 +34,20 @@ from reporecord import *
 # Summary
 # .............................................................................
 # This uses the GitHub API to download basic information about every GitHub
-# repository and stores it in a ZODB database.  The data is stored as a simple
-# object for every repository, and has the following fields:
-#
-#    id = repository unique id (an integer)
-#    path = the GitHub URL to the repository, minus the http://github.com part
-#    description = the description associated with the repository
-#    owner = the name of the owner account
-#    owner_type = whether the owner is a user or organization
+# repository and stores it in a ZODB database.
 #
 # This code pays attention to the GitHub rate limit on API calls and pauses
 # when it hits the 5000/hr limit, restarting again after the necessary time
-# has elapsed to do another 5000 calls.  Each GitHub API call nets 100
-# records, so a rate of 5000/hr = 500,000/hr.  GitHub is estimated to have
-# 19,000,000 projects now, so that works out to 38 hours to download it all.
+# has elapsed to do another 5000 calls.  For basic information, each GitHub
+# API call nets 100 records, so a rate of 5000/hr = 500,000/hr.  More detailed
+# information such as programming languages only goes at 1 per API call, which
+# means no more than 5000/hr.
 #
 # This uses the github3.py module (https://github.com/sigmavirus24/github3.py),
-# a convenient and reasonably full-featured Python GitHub API library.
+# for some things.  Unfortunately, github3.py turns out to be inefficient for
+# getting detailed info such as languages because it causes 2 API calls to be
+# used for each repo.  So, for some things, this code uses the GitHub API
+# directly, via the Python httplib interface.
 
 
 # Main class.
