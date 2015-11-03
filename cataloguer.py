@@ -141,8 +141,7 @@ def print_index():
     dbroot = db.open()
     if '__SINCE_MARKER__' in dbroot:
         msg('Last seen id: {}'.format(dbroot['__SINCE_MARKER__']))
-    for key in dbroot:
-        entry = dbroot[key]
+    for key, entry in dbroot.items():
         if not isinstance(entry, RepoEntry):
             continue
         print(entry)
