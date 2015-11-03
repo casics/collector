@@ -26,9 +26,8 @@ from BTrees.OOBTree import BTree
 from datetime import datetime
 from time import time, sleep
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from common import *
-
+sys.path.append(os.path.join(os.path.dirname(__file__), "../common"))
+from utils import *
 from reporecord import *
 
 

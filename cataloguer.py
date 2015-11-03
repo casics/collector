@@ -19,11 +19,11 @@ from datetime import datetime
 from time import sleep
 from timeit import default_timer as timer
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from common import *
-
+sys.path.append(os.path.join(os.path.dirname(__file__), "../common"))
 from dbinterface import *
+from utils import *
 from reporecord import *
+
 from github_indexer import GitHubIndexer
 
 
