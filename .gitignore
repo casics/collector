@@ -1,0 +1,19 @@
+# -*- mode: gitignore; -*-
+
+# If the current directory contains a symlink to the Python github3 module,
+# ignore it the link.
+github3
+
+# Ignore python compiled files.
+*.pyc
+
+# Ignore the database itself, because it's very large and
+# doeesn't need to be in git.
+data.fs
+data.fs.index
+data.fs.lock
+data.fs.tmp
+
+# Other misc files.
+.cache
+
