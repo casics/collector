@@ -10,6 +10,53 @@
 # Inventory Creation System.  For more information, visit http://casics.org.
 # ------------------------------------------------------------------------- -->
 
+# Basic principles
+# ----------------
+# This is a front-end interface to a simple system to gather data about
+# repositories hosted in places like GitHub and store that data in a database.
+# The code is more or less abstracted from the specifics of individual
+# repositories as well as the database format.  The relevant pieces are:
+#    host communications           => github_indexer.py
+#    repository data record format => RepoEntry from common/reporecord.py
+#    database interface            => Database from common/dbinterface.py
+#
+# The system is meant to be expandable to other hosting sites in addition to
+# GitHub, but right now only GitHub is implemented.
+#
+# The basic catalog-building procedure goes like this:
+#
+#  1) Start the database server (using ../database/startserver.py)
+#
+#  2) Run this cataloguer with the "-c" flag to query hosting sites like
+#     GitHub and store the results in the database.  This can take a very long
+#     time.  (It took several days for 25 million entries in GitHub.)  The
+#     command line is very simple:
+#
+#      ./cataloguer -c
+#
+#     But it's a good idea to capture the output of that as well as send it to
+#     the background, so really you want to run it like this (using csh/tcsh
+#     shell syntax):
+#
+#      ./cataloguer -c >& log-cataloguer.txt &
+#
+#  3) The cataloguing process invoked with "-c" only retrieves very basic
+#     information about the repositories in the case of GitHub, because the
+#     GitHub API is such that you can get the most basic info for 100 repos
+#     at a time with a single API call, but to get more detailed information
+#     such as the programming languages used in a given repository, you have
+#     to query each repo at one API call per repo.  Since GitHub's rate limit
+#     is 5000 API calls per hour, it means that getting the detailed info
+#     proceeds at a 100 times slower rate.  Consequently, the procedure to
+#     get programming language info is implemented as a separate step in this
+#     program.  It is invoked with the "-l" flag.  To invoke it:
+#
+#      ./cataloguer -l >& log-languages.txt &
+#
+#  4) Once the cataloguer is finished, you can use this program
+#     (cataloguer.py) to print some information in the database.  E.g.,
+#     "cataloguer -p" will print a summary of every entry in the database.
+
 import pdb
 import sys
 import os
@@ -110,27 +157,29 @@ def summarize_db():
     '''Print a summary of the database, without listing every entry.'''
     db = Database()
     dbroot = db.open()
-    # Do each host in turn.  (Currently only GitHub.)
-    indexer = GitHubIndexer()
-    indexer.print_summary(dbroot)
-
     # Add up some stats.
     msg('Gathering programming language statistics ...')
     language_totals = {}                      # Pairs of language:count.
+    repos_with_languages = 0                  # Count of repos we have lang for.
     for count, key in enumerate(dbroot):
+        if (count + 1) % 100000 == 0:
+            print(count + 1, '...', end='', flush=True)
         entry = dbroot[key]
         if not isinstance(entry, RepoEntry):
             continue
         if entry.languages != None:
+            repos_with_languages = repos_with_languages + 1
             for lang in entry.languages:
                 if lang in language_totals:
                     language_totals[lang] = language_totals[lang] + 1
                 else:
                     language_totals[lang] = 1
-    msg('Language use across {} repositories'.format(count))
+    msg('Database has {} total entries.'.format(count))
+    msg('We have language data for {} entries.'.format(repos_with_languages))
+    msg('Language usage counts:')
     for key, value in sorted(language_totals.items(), key=operator.itemgetter(1),
                              reverse=True):
-        msg('{}: {}'.format(Language.name(key), value))
+        msg('  {0:<24s}: {1}'.format(Language.name(key), value))
     db.close()
 
 
