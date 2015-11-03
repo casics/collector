@@ -159,25 +159,26 @@ def summarize_db():
     dbroot = db.open()
     # Add up some stats.
     msg('Gathering programming language statistics ...')
-    language_totals = {}                      # Pairs of language:count.
-    repos_with_languages = 0                  # Count of repos we have lang for.
-    for count, key in enumerate(dbroot):
-        if (count + 1) % 100000 == 0:
-            print(count + 1, '...', end='', flush=True)
-        entry = dbroot[key]
+    entries = 0                         # Total number of entries in db.
+    entries_with_languages = 0          # Count of repos we have lang for.
+    language_counts = {}                # Pairs of language:count.
+    for key, entry in dbroot.items():
+        entries += 1
+        if (entries + 1) % 100000 == 0:
+            print(entries + 1, '...', end='', flush=True)
         if not isinstance(entry, RepoEntry):
             continue
         if entry.languages != None:
-            repos_with_languages = repos_with_languages + 1
+            entries_with_languages += 1
             for lang in entry.languages:
-                if lang in language_totals:
-                    language_totals[lang] = language_totals[lang] + 1
+                if lang in language_counts:
+                    language_counts[lang] = language_counts[lang] + 1
                 else:
-                    language_totals[lang] = 1
-    msg('Database has {} total entries.'.format(count))
-    msg('We have language data for {} entries.'.format(repos_with_languages))
+                    language_counts[lang] = 1
+    msg('Database has {} total entries.'.format(entries))
+    msg('We have language data for {} entries.'.format(entries_with_languages))
     msg('Language usage counts:')
-    for key, value in sorted(language_totals.items(), key=operator.itemgetter(1),
+    for key, value in sorted(language_counts.items(), key=operator.itemgetter(1),
                              reverse=True):
         msg('  {0:<24s}: {1}'.format(Language.name(key), value))
     db.close()
