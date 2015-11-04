@@ -242,15 +242,19 @@ class GitHubIndexer():
 
 
     def run(self, db):
-        # If we're restarting this process, we'll already have entries.
-        last_seen = None
         msg('Examining our current database')
-        count = len(db)
-        if count > 1:
-            msg('There are {} entries in the database'.format(count))
-            last_seen = self.get_last_seen(db)
-            if last_seen:
-                msg('We last read repository id = {}'.format(last_seen))
+        count = self.get_total_entries(db)
+        if not count:
+            msg('Did not find a count of entries.  Counting now...')
+            count = len(db)
+            self.set_total_entries(count, db)
+        msg('There are {} entries in the database'.format(count))
+
+        last_seen = self.get_last_seen(db)
+        if last_seen:
+            msg('We last read repository id = {}'.format(last_seen))
+        else:
+            msg('No record of the last entry seen.  Starting from the top.')
 
         # The iterator returned by github.all_repositories() is continuous; behind
         # the scenes, it uses the GitHub API to get new data when needed.  Each API
@@ -295,6 +299,7 @@ class GitHubIndexer():
                         continue
 
                 self.set_last_seen(repo.id, db)
+                self.set_total_entries(count, db)
 
                 loop_count += 1
                 if loop_count > 100:
@@ -319,19 +324,26 @@ class GitHubIndexer():
                 failures += 1
 
         if failures >= self._max_failures:
-            msg('Stopping because of too many repeated failures')
+            msg('Stopping because of too many repeated failures.')
         else:
-            msg('Done')
+            msg('Done.')
 
 
     def add_languages(self, db):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
         start = time()
+        entries_with_languages = self.get_language_list(db)
+        if not entries_with_languages:
+            entries_with_languages = []
         failures = 0
         for count, key in enumerate(db):
             entry = db[key]
             if hasattr(entry, 'id'):
+                if key in entries_with_languages:
+                    continue
+
                 if hasattr(entry, 'languages') and entry.languages != None:
+                    entries_with_languages.append(key)
                     continue
 
                 if self.api_calls_left() < 1:
@@ -351,6 +363,7 @@ class GitHubIndexer():
                                        languages)
                     db[key] = record
                     failures = 0
+                    entries_with_languages.append(key)
                 except Exception as err:
                     msg('Access error for "{}": {}'.format(entry.path, err))
                     failures += 1
@@ -362,6 +375,7 @@ class GitHubIndexer():
                 msg('Stopping because of too many consecutive failures')
                 break
 
+        self.set_language_list(entries_with_languages, db)
         msg('')
         msg('Done.')
         transaction.commit()
