@@ -126,30 +126,73 @@ class GitHubIndexer():
             return None
 
 
+    def set_language_list(self, lst, db):
+        db['__ENTRIES_WITH_LANGUAGES__'] = lst
+        transaction.commit()
+
+
+    def get_language_list(self, db):
+        if '__ENTRIES_WITH_LANGUAGES__' in db:
+            return db['__ENTRIES_WITH_LANGUAGES__']
+        else:
+            return None
+
+
+    def set_total_entries(self, count, db):
+        db['__TOTAL_ENTRIES__'] = count
+        transaction.commit()
+
+
+    def get_total_entries(self, db):
+        if '__TOTAL_ENTRIES__' in db:
+            return db['__TOTAL_ENTRIES__']
+        else:
+            return None
+
+
     def update_internal(self, db):
         last_seen = 0
-        msg('Counting entries in the database ...')
-        count = len(db)
+        entries = 0
+        entries_with_languages = []
         msg('Scanning every entry in the database ...')
-        for i, key in enumerate(db):
-            entry = db[key]
-            if hasattr(entry, 'id') and entry.id > last_seen:
+        for key, entry in db.items():
+            if not isinstance(entry, RepoEntry):
+                continue
+            entries += 1
+            if entry.id > last_seen:
                 last_seen = entry.id
-            update_progress(i/count)
-        msg('')
-        msg('Done.  Last seen id: {}'.format(last_seen))
+            if entry.languages != None:
+                entries_with_languages.append(key)
+            if (entries + 1) % 100000 == 0:
+                print(entries + 1, '...', end='', flush=True)
+        msg('Done.')
+        self.set_total_entries(entries, db)
+        msg('Database has {} total GitHub entries.'.format(entries))
         self.set_last_seen(last_seen, db)
+        msg('Last seen GitHub repository id: {}'.format(last_seen))
+        self.set_language_list(entries_with_languages, db)
+        msg('Number of entries with language info: {}'.format(len(entries_with_languages)))
 
 
     def print_summary(self, db):
-        msg('Counting entries in the database ...')
-        count = len(db)
-        if '__SINCE_MARKER__' in db:
-            msg('Database contains {} entries.'.format(count - 1))
-            msg('Last seen GitHub id: {}.'.format(db['__SINCE_MARKER__']))
+        total = self.get_total_entries(db)
+        if total:
+            msg('Database has {} total GitHub entries'.format(total))
+            last_seen = self.get_last_seen(db)
+            if last_seen:
+                msg('Last seen GitHub id: {}.'.format(db['__SINCE_MARKER__']))
+            else:
+                msg('No "last_seen" marker found.')
+            entries_with_languages = self.get_language_list(db)
+            if entries_with_languages:
+                msg('Database has {} entries with language info'.format(len(entries_with_languages)))
+            else:
+                msg('No entries recorded with language info.')
         else:
-            msg('Database contains {} entries.'.format(count))
-            msg('No last_seen marker found.')
+            msg('Database has not been updated to include counts. Doing it now...')
+            self.update_internal(db)
+            total = self.get_total_entries(db)
+            msg('Database has {} total GitHub entries'.format(total))
 
 
     def wait_for_reset(self):
