@@ -156,30 +156,15 @@ def summarize_db():
     '''Print a summary of the database, without listing every entry.'''
     db = Database()
     dbroot = db.open()
-    # Add up some stats.
-    msg('Gathering programming language statistics ...')
-    entries = 0                         # Total number of entries in db.
-    entries_with_languages = 0          # Count of repos we have lang for.
-    language_counts = {}                # Pairs of language:count.
-    for key, entry in dbroot.items():
-        entries += 1
-        if (entries + 1) % 100000 == 0:
-            print(entries + 1, '...', end='', flush=True)
-        if not isinstance(entry, RepoEntry):
-            continue
-        if entry.languages != None:
-            entries_with_languages += 1
-            for lang in entry.languages:
-                if lang in language_counts:
-                    language_counts[lang] = language_counts[lang] + 1
-                else:
-                    language_counts[lang] = 1
-    msg('Database has {} total entries.'.format(entries))
-    msg('We have language data for {} entries.'.format(entries_with_languages))
-    msg('Language usage counts:')
-    for key, value in sorted(language_counts.items(), key=operator.itemgetter(1),
-                             reverse=True):
-        msg('  {0:<24s}: {1}'.format(Language.name(key), value))
+    # Print summary info per host.
+    indexer = GitHubIndexer()
+    indexer.print_summary(dbroot)
+    # Report some stats.
+    entries_with_languages = get_language_list(dbroot)
+    if not entries_with_languages:
+        indexer = GitHubIndexer()
+        indexer.update_internal(dbroot)
+    summarize_language_stats(dbroot)
     db.close()
 
 
@@ -191,6 +176,45 @@ def update_db():
     indexer = GitHubIndexer()
     indexer.update_internal(dbroot)
     db.close()
+
+
+# Helpers
+# .............................................................................
+
+def get_language_list(dbroot):
+    if '__ENTRIES_WITH_LANGUAGES__' in dbroot:
+        return dbroot['__ENTRIES_WITH_LANGUAGES__']
+    else:
+        return None
+
+
+def summarize_language_stats(dbroot):
+    msg('Gathering programming language statistics ...')
+    entries_with_languages = get_language_list(dbroot)
+    entries = 0                     # Total number of entries seen.
+    language_counts = {}            # Pairs of language:count.
+    for name in entries_with_languages:
+        entries += 1
+        if (entries + 1) % 100000 == 0:
+            print(entries + 1, '...', end='', flush=True)
+        if name in dbroot:
+            entry = dbroot[name]
+        else:
+            msg('Cannot find entry "{}" in database'.format(name))
+            continue
+        if not isinstance(entry, RepoEntry):
+            msg('Entry "{}" is not a RepoEntry'.format(name))
+            continue
+        if entry.languages != None:
+            for lang in entry.languages:
+                if lang in language_counts:
+                    language_counts[lang] = language_counts[lang] + 1
+                else:
+                    language_counts[lang] = 1
+    msg('Language usage counts:')
+    for key, value in sorted(language_counts.items(), key=operator.itemgetter(1),
+                             reverse=True):
+        msg('  {0:<24s}: {1}'.format(Language.name(key), value))
 
 
 # Plac annotations for main function arguments
