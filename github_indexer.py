@@ -368,7 +368,7 @@ class GitHubIndexer():
                     msg('Access error for "{}": {}'.format(entry.path, err))
                     failures += 1
             if count % 100 == 0:
-                transaction.commit()
+                self.set_language_list(entries_with_languages, db)
                 msg('{} [{:2f}]'.format(count, time() - start))
                 start = time()
             if failures >= self._max_failures:
@@ -378,4 +378,3 @@ class GitHubIndexer():
         self.set_language_list(entries_with_languages, db)
         msg('')
         msg('Done.')
-        transaction.commit()
