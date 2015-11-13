@@ -22,7 +22,7 @@ import ZODB
 import persistent
 import transaction
 from base64 import b64encode
-from BTrees.OOBTree import BTree
+from BTrees.OOBTree import TreeSet
 from datetime import datetime
 from time import time, sleep
 
@@ -126,8 +126,8 @@ class GitHubIndexer():
             return None
 
 
-    def set_language_list(self, lst, db):
-        db['__ENTRIES_WITH_LANGUAGES__'] = lst
+    def set_language_list(self, value, db):
+        db['__ENTRIES_WITH_LANGUAGES__'] = value
         transaction.commit()
 
 
@@ -153,7 +153,7 @@ class GitHubIndexer():
     def update_internal(self, db):
         last_seen = 0
         entries = 0
-        entries_with_languages = []
+        entries_with_languages = TreeSet()
         msg('Scanning every entry in the database ...')
         for key, entry in db.items():
             if not isinstance(entry, RepoEntry):
@@ -162,7 +162,7 @@ class GitHubIndexer():
             if entry.id > last_seen:
                 last_seen = entry.id
             if entry.languages != None:
-                entries_with_languages.append(key)
+                entries_with_languages.add(key)
             if (entries + 1) % 100000 == 0:
                 print(entries + 1, '...', end='', flush=True)
         msg('Done.')
@@ -334,7 +334,7 @@ class GitHubIndexer():
         start = time()
         entries_with_languages = self.get_language_list(db)
         if not entries_with_languages:
-            entries_with_languages = []
+            entries_with_languages = TreeSet()
         failures = 0
         for count, key in enumerate(db):
             entry = db[key]
@@ -343,7 +343,7 @@ class GitHubIndexer():
                     continue
 
                 if hasattr(entry, 'languages') and entry.languages != None:
-                    entries_with_languages.append(key)
+                    entries_with_languages.add(key)
                     continue
 
                 if self.api_calls_left() < 1:
@@ -363,7 +363,7 @@ class GitHubIndexer():
                                        languages)
                     db[key] = record
                     failures = 0
-                    entries_with_languages.append(key)
+                    entries_with_languages.add(key)
                 except Exception as err:
                     msg('Access error for "{}": {}'.format(entry.path, err))
                     failures += 1
