@@ -17,7 +17,7 @@
 # The code is more or less abstracted from the specifics of individual
 # repositories as well as the database format.  The relevant pieces are:
 #    host communications           => github_indexer.py
-#    repository data record format => RepoEntry from common/reporecord.py
+#    repository data record format => RepoData from common/reporecord.py
 #    database interface            => Database from common/dbinterface.py
 #
 # The system is meant to be expandable to other hosting sites in addition to
@@ -80,13 +80,14 @@ from github_indexer import GitHubIndexer
 # should hopefully be possible.
 
 def main(index_create=False, index_langs=False, index_print=False,
-         summarize=False, update=False):
+         index_readmes=False, summarize=False, update=False):
     '''Generate or print index of projects found in repositories.'''
-    if index_create:  create_index()
-    elif index_langs: add_languages_to_entries()
-    elif index_print: print_index()
-    elif summarize:   summarize_db()
-    elif update:      update_db()
+    if index_create:    create_index()
+    elif index_langs:   add_languages_to_entries()
+    elif index_readmes: add_readmes_to_entries()
+    elif index_print:   print_index()
+    elif summarize:     summarize_db()
+    elif update:        update_db()
     else:
         raise SystemExit('Unrecognized command line flag')
 
@@ -135,6 +136,28 @@ def add_languages_to_entries():
     db.close()
 
 
+def add_readmes_to_entries():
+    msg('Started at ', datetime.now())
+    started = timer()
+
+    db = Database()
+    dbroot = db.open()
+
+    # Do each host in turn.  (Currently only GitHub.)
+
+    msg('Invoking GitHub indexer')
+    indexer = GitHubIndexer()
+    indexer.add_readmes(dbroot)
+
+    # We're done.  Print some messages and exit.
+
+    stopped = timer()
+    msg('Stopped at {}'.format(datetime.now()))
+    msg('Time to get repositories: {}'.format(stopped - started))
+
+    db.close()
+
+
 def print_index():
     '''Print the database contents.'''
     db = Database()
@@ -142,7 +165,7 @@ def print_index():
     if '__SINCE_MARKER__' in dbroot:
         msg('Last seen id: {}'.format(dbroot['__SINCE_MARKER__']))
     for key, entry in dbroot.items():
-        if not isinstance(entry, RepoEntry):
+        if not isinstance(entry, RepoData):
             continue
         print(entry)
         if entry.description:
@@ -188,7 +211,15 @@ def get_language_list(dbroot):
         return None
 
 
+def get_readme_list(db):
+    if '__ENTRIES_WITH_READMES__' in db:
+        return db['__ENTRIES_WITH_READMES__']
+    else:
+        return None
+
+
 def summarize_language_stats(dbroot):
+    msg('')
     msg('Gathering programming language statistics ...')
     entries_with_languages = get_language_list(dbroot)
     entries = 0                     # Total number of entries seen.
@@ -202,8 +233,9 @@ def summarize_language_stats(dbroot):
         else:
             msg('Cannot find entry "{}" in database'.format(name))
             continue
-        if not isinstance(entry, RepoEntry):
-            msg('Entry "{}" is not a RepoEntry'.format(name))
+        pdb.set_trace()
+        if not isinstance(entry, RepoData):
+            msg('Entry "{}" is not a RepoData'.format(name))
             continue
         if entry.languages != None:
             for lang in entry.languages:
@@ -217,17 +249,19 @@ def summarize_language_stats(dbroot):
         msg('  {0:<24s}: {1}'.format(Language.name(key), value))
 
 
+
 # Plac annotations for main function arguments
 # .............................................................................
 # Argument annotations are: (help, kind, abbrev, type, choices, metavar)
 # Plac automatically adds a -h argument for help, so no need to do it here.
 
 main.__annotations__ = dict(
-    index_create = ('create index',                  'flag', 'c'),
-    index_langs  = ('add programming languages',     'flag', 'l'),
-    index_print  = ('print index',                   'flag', 'p'),
-    summarize    = ('summarize database',            'flag', 's'),
-    update       = ('update internal database data', 'flag', 'u'),
+    index_create  = ('create index',                  'flag', 'c'),
+    index_langs   = ('add programming languages',     'flag', 'l'),
+    index_print   = ('print index',                   'flag', 'p'),
+    index_readmes = ('add README files',              'flag', 'r'),
+    summarize     = ('summarize database',            'flag', 's'),
+    update        = ('update internal database data', 'flag', 'u'),
 )
 
 # Entry point
