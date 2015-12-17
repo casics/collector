@@ -18,6 +18,7 @@ import json
 import http
 import urllib
 import github3
+import zlib
 import ZODB
 import persistent
 import transaction
@@ -68,9 +69,18 @@ class GitHubIndexer():
                 Host.name(Host.GITHUB))
             raise SystemExit(text)
 
+
+    def github(self):
+        '''Returns the github3.py connection object.  If no connection has
+        been established yet, it connects to GitHub first.'''
+
+        if hasattr(self, '_github') and self._github:
+            return self._github
+
         msg('Connecting to GitHub as user {}'.format(self._login))
         try:
             self._github = github3.login(self._login, self._password)
+            return self._github
         except Exception as err:
             msg(err)
             text = 'Failed to log into GitHub'
@@ -83,34 +93,35 @@ class GitHubIndexer():
 
     def api_calls_left(self):
         '''Returns an integer.'''
-        rate_limit = self._github.rate_limit()
+        rate_limit = self.github().rate_limit()
         return rate_limit['resources']['core']['remaining']
 
 
     def api_reset_time(self):
         '''Returns a timestamp value, i.e., seconds since epoch.'''
-        rate_limit = self._github.rate_limit()
+        rate_limit = self.github().rate_limit()
         return rate_limit['resources']['core']['reset']
 
 
     def get_iterator(self, last_seen=None):
         try:
             if last_seen:
-                return self._github.all_repositories(since=last_seen)
+                return self.github().all_repositories(since=last_seen)
             else:
-                return self._github.all_repositories()
+                return self.github().all_repositories()
         except Exception as err:
             msg('github.all_repositories() failed with {0}'.format(err))
             sys.exit(1)
 
 
     def add_record(self, repo, db):
-        db[repo.full_name] = RepoEntry(Host.GITHUB,
-                                       repo.id,
-                                       repo.full_name,
-                                       repo.description,
-                                       repo.owner.login,
-                                       repo.owner.type)
+        db[repo.full_name] = RepoData(Host.GITHUB,
+                                      repo.id,
+                                      repo.full_name,
+                                      repo.description,
+                                      '',
+                                      repo.owner.login,
+                                      repo.owner.type)
         transaction.commit()
 
 
@@ -138,6 +149,18 @@ class GitHubIndexer():
             return None
 
 
+    def set_readme_list(self, value, db):
+        db['__ENTRIES_WITH_READMES__'] = value
+        transaction.commit()
+
+
+    def get_readme_list(self, db):
+        if '__ENTRIES_WITH_READMES__' in db:
+            return db['__ENTRIES_WITH_READMES__']
+        else:
+            return None
+
+
     def set_total_entries(self, count, db):
         db['__TOTAL_ENTRIES__'] = count
         transaction.commit()
@@ -156,7 +179,7 @@ class GitHubIndexer():
         entries_with_languages = TreeSet()
         msg('Scanning every entry in the database ...')
         for key, entry in db.items():
-            if not isinstance(entry, RepoEntry):
+            if not isinstance(entry, RepoData):
                 continue
             entries += 1
             if entry.id > last_seen:
@@ -177,7 +200,7 @@ class GitHubIndexer():
     def print_summary(self, db):
         total = self.get_total_entries(db)
         if total:
-            msg('Database has {} total GitHub entries'.format(total))
+            msg('Database has {} total GitHub entries.'.format(total))
             last_seen = self.get_last_seen(db)
             if last_seen:
                 msg('Last seen GitHub id: {}.'.format(db['__SINCE_MARKER__']))
@@ -185,9 +208,14 @@ class GitHubIndexer():
                 msg('No "last_seen" marker found.')
             entries_with_languages = self.get_language_list(db)
             if entries_with_languages:
-                msg('Database has {} entries with language info'.format(len(entries_with_languages)))
+                msg('Database has {} entries with language info.'.format(len(entries_with_languages)))
             else:
                 msg('No entries recorded with language info.')
+            entries_with_readmes = self.get_readme_list(db)
+            if entries_with_readmes:
+                msg('Database has {} entries with README files.'.format(len(entries_with_readmes)))
+            else:
+                msg('No entries recorded with README files.')
         else:
             msg('Database has not been updated to include counts. Doing it now...')
             self.update_internal(db)
@@ -228,6 +256,15 @@ class GitHubIndexer():
             return []
         else:
             return json.loads(response)
+
+
+    def get_readme(self, entry):
+        # Get the "preferred" readme file for a repository, as described in
+        # https://developer.github.com/v3/repos/contents/
+        # Using github3.py would need 2 api calls per repo to get this info.
+        # Here we do direct access to bring it to 1 api call.
+        url = 'https://api.github.com/repos/{}/readme'.format(entry.path)
+        return self.direct_api_call(url)
 
 
     def raise_exception_for_response(self, request):
@@ -354,16 +391,25 @@ class GitHubIndexer():
                 try:
                     raw_languages = [lang for lang in self.get_languages(entry)]
                     languages = [Language.identifier(x) for x in raw_languages]
-                    record = RepoEntry(Host.GITHUB,
-                                       entry.id,
-                                       entry.path,
-                                       entry.description,
-                                       entry.owner,
-                                       entry.owner_type,
-                                       languages)
+
+                    # Old record format didn't have readme, but we need to
+                    # preserve the value if this entry has it.
+                    readme = entry.readme if hasattr(entry, 'readme') else None
+
+                    # Now update the record.
+                    record = RepoData(Host.GITHUB,
+                                      entry.id,
+                                      entry.path,
+                                      entry.description,
+                                      readme,
+                                      entry.owner,
+                                      entry.owner_type,
+                                      languages)
                     db[key] = record
-                    failures = 0
+
+                    # Misc bookkeeping.
                     entries_with_languages.add(key)
+                    failures = 0
                 except Exception as err:
                     msg('Access error for "{}": {}'.format(entry.path, err))
                     failures += 1
@@ -376,5 +422,70 @@ class GitHubIndexer():
                 break
 
         self.set_language_list(entries_with_languages, db)
+        msg('')
+        msg('Done.')
+
+
+    def add_readmes(self, db):
+        msg('Initial GitHub API calls remaining: ', self.api_calls_left())
+        start = time()
+        entries_with_readmes = self.get_readme_list(db)
+        if not entries_with_readmes:
+            entries_with_readmes = TreeSet()
+        failures = 0
+        for count, key in enumerate(db):
+            entry = db[key]
+            if hasattr(entry, 'id'):
+                if key in entries_with_readmes:
+                    continue
+
+                if hasattr(entry, 'readme') and entry.readme:
+                    entries_with_readmes.add(key)
+                    continue
+
+                if self.api_calls_left() < 1:
+                    self.wait_for_reset()
+                    failures = 0
+                    msg('Continuing')
+
+                try:
+                    readme = self.get_readme(entry)
+                    if readme:
+                        msg(entry.path)
+                        record = RepoData(Host.GITHUB,
+                                          entry.id,
+                                          entry.path,
+                                          entry.description,
+                                          zlib.compress(bytes(readme, 'utf-8')),
+                                          entry.owner,
+                                          entry.owner_type,
+                                          entry.languages)
+                        db[key] = record
+                        failures = 0
+                        entries_with_readmes.add(key)
+                    else:
+                        # If GitHub doesn't return a README file, we need to
+                        # record something to indicate that we already tried.
+                        # The something can't be '', or None, or 0.  We use -1.
+                        record = RepoData(Host.GITHUB,
+                                          entry.id,
+                                          entry.path,
+                                          entry.description,
+                                          -1,
+                                          entry.owner,
+                                          entry.owner_type,
+                                          entry.languages)
+                except Exception as err:
+                    msg('Access error for "{}": {}'.format(entry.path, err))
+                    failures += 1
+            if count % 100 == 0:
+                self.set_readme_list(entries_with_readmes, db)
+                msg('{} [{:2f}]'.format(count, time() - start))
+                start = time()
+            if failures >= self._max_failures:
+                msg('Stopping because of too many consecutive failures')
+                break
+
+        self.set_readme_list(entries_with_readmes, db)
         msg('')
         msg('Done.')
