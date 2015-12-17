@@ -57,16 +57,37 @@ from reporecord import *
 class GitHubIndexer():
     _max_failures   = 10
 
-    def __init__(self):
+    def __init__(self, user_login=None):
         cfg = Config()
+        section = Host.name(Host.GITHUB)
 
         try:
-            self._login = cfg.get(Host.name(Host.GITHUB), 'login')
-            self._password = cfg.get(Host.name(Host.GITHUB), 'password')
+            if user_login:
+                for name, value in cfg.items(section):
+                    if name.startswith('login') and value == user_login:
+                        self._login = user_login
+                        index = name[len('login'):]
+                        if index:
+                            self._password = cfg.get(section, 'password' + index)
+                        else:
+                            # login entry doesn't have an index number.
+                            # Might be a config file in the old format.
+                            self._password = value
+                        break
+                # If we get here, we failed to find the requested login.
+                msg('Cannot find "{}" in section {} of config.ini'.format(
+                    user_login, section))
+            else:
+                try:
+                    self._login = cfg.get(section, 'login1')
+                    self._password = cfg.get(section, 'password1')
+                except:
+                    self._login = cfg.get(section, 'login')
+                    self._password = cfg.get(section, 'password')
         except Exception as err:
             msg(err)
             text = 'Failed to read "login" and/or "password" for {}'.format(
-                Host.name(Host.GITHUB))
+                section)
             raise SystemExit(text)
 
 
