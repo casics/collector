@@ -460,8 +460,7 @@ class GitHubIndexer():
                 if key in entries_with_readmes:
                     continue
 
-                if hasattr(entry, 'readme') and entry.readme:
-                    entries_with_readmes.add(key)
+                if hasattr(entry, 'readme') and entry.readme and entry.readme != -1:
                     continue
 
                 if self.api_calls_left() < 1:
@@ -473,6 +472,7 @@ class GitHubIndexer():
                     readme = self.get_readme(entry)
                     if readme:
                         msg(entry.path)
+                        entries_with_readmes.add(key)
                         record = RepoData(Host.GITHUB,
                                           entry.id,
                                           entry.path,
@@ -481,9 +481,6 @@ class GitHubIndexer():
                                           entry.owner,
                                           entry.owner_type,
                                           entry.languages)
-                        db[key] = record
-                        failures = 0
-                        entries_with_readmes.add(key)
                     else:
                         # If GitHub doesn't return a README file, we need to
                         # record something to indicate that we already tried.
@@ -496,10 +493,13 @@ class GitHubIndexer():
                                           entry.owner,
                                           entry.owner_type,
                                           entry.languages)
+                    db[key] = record
+                    failures = 0
                 except Exception as err:
                     msg('Access error for "{}": {}'.format(entry.path, err))
                     failures += 1
             if count % 100 == 0:
+                # The next call also does a commit, so we don't have to here.
                 self.set_readme_list(entries_with_readmes, db)
                 msg('{} [{:2f}]'.format(count, time() - start))
                 start = time()
