@@ -460,7 +460,7 @@ class GitHubIndexer():
                 if key in entries_with_readmes:
                     continue
 
-                if hasattr(entry, 'readme') and entry.readme and entry.readme != -1:
+                if hasattr(entry, 'readme') and entry.readme:
                     continue
 
                 if self.api_calls_left() < 1:
