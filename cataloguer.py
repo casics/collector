@@ -61,7 +61,6 @@ import pdb
 import sys
 import os
 import plac
-import operator
 from datetime import datetime
 from time import sleep
 from timeit import default_timer as timer
@@ -80,19 +79,21 @@ from github_indexer import GitHubIndexer
 # should hopefully be possible.
 
 def main(user_login=None, index_create=False, index_langs=False,
-         index_print=False, index_readmes=False, summarize=False, update=False):
+         locate_by_lang=False, index_print=False, index_readmes=False,
+         summarize=False, update=False):
     '''Generate or print index of projects found in repositories.'''
-    if index_create:    create_index(user_login)
-    elif index_langs:   add_languages_to_entries(user_login)
-    elif index_readmes: add_readmes_to_entries(user_login)
-    elif index_print:   print_index(user_login)
-    elif summarize:     summarize_db(user_login)
-    elif update:        update_db(user_login)
+    if   summarize:      do_action("print_summary",       user_login)
+    elif update:         do_action("update_internal",     user_login)
+    elif index_print:    do_action("print_index",         user_login)
+    elif index_create:   do_action("create_index",        user_login)
+    elif index_langs:    do_action("add_languages",       user_login)
+    elif index_readmes:  do_action("add_readmes",         user_login)
+    elif locate_by_lang: do_action("locate_by_languages", user_login)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
 
-def create_index(user_login=None):
+def do_action(action, user_login=None):
     msg('Started at ', datetime.now())
     started = timer()
 
@@ -101,152 +102,17 @@ def create_index(user_login=None):
 
     # Do each host in turn.  (Currently only GitHub.)
 
-    msg('Invoking GitHub indexer')
     indexer = GitHubIndexer(user_login)
-    indexer.run(dbroot)
+    method = getattr(indexer, action, None)
+    method(dbroot)
 
     # We're done.  Print some messages and exit.
 
     stopped = timer()
     msg('Stopped at {}'.format(datetime.now()))
-    msg('Time to get repositories: {}'.format(stopped - started))
+    msg('Time elapsed: {}'.format(stopped - started))
 
     db.close()
-
-
-def add_languages_to_entries(user_login=None):
-    msg('Started at ', datetime.now())
-    started = timer()
-
-    db = Database()
-    dbroot = db.open()
-
-    # Do each host in turn.  (Currently only GitHub.)
-
-    msg('Invoking GitHub indexer')
-    indexer = GitHubIndexer(user_login)
-    indexer.add_languages(dbroot)
-
-    # We're done.  Print some messages and exit.
-
-    stopped = timer()
-    msg('Stopped at {}'.format(datetime.now()))
-    msg('Time to get repositories: {}'.format(stopped - started))
-
-    db.close()
-
-
-def add_readmes_to_entries(user_login=None):
-    msg('Started at ', datetime.now())
-    started = timer()
-
-    db = Database()
-    dbroot = db.open()
-
-    # Do each host in turn.  (Currently only GitHub.)
-
-    msg('Invoking GitHub indexer')
-    indexer = GitHubIndexer(user_login)
-    indexer.add_readmes(dbroot)
-
-    # We're done.  Print some messages and exit.
-
-    stopped = timer()
-    msg('Stopped at {}'.format(datetime.now()))
-    msg('Time to get repositories: {}'.format(stopped - started))
-
-    db.close()
-
-
-def print_index(user_login=None):
-    '''Print the database contents.'''
-    db = Database()
-    dbroot = db.open()
-    if '__SINCE_MARKER__' in dbroot:
-        msg('Last seen id: {}'.format(dbroot['__SINCE_MARKER__']))
-    for key, entry in dbroot.items():
-        if not isinstance(entry, RepoData):
-            continue
-        print(entry)
-        if entry.description:
-            msg(' ', entry.description.encode('ascii', 'ignore').decode('ascii'))
-        else:
-            msg('  -- no description --')
-    db.close()
-
-
-def summarize_db(user_login=None):
-    '''Print a summary of the database, without listing every entry.'''
-    db = Database()
-    dbroot = db.open()
-    # Print summary info per host.
-    indexer = GitHubIndexer(user_login)
-    indexer.print_summary(dbroot)
-    # Report some stats.
-    entries_with_languages = get_language_list(dbroot)
-    if not entries_with_languages:
-        indexer = GitHubIndexer(user_login)
-        indexer.update_internal(dbroot)
-    summarize_language_stats(dbroot)
-    db.close()
-
-
-def update_db(user_login=None):
-    '''Perform an internal update of the database, for consistency.'''
-    db = Database()
-    dbroot = db.open()
-    # Do each host in turn.  (Currently only GitHub.)
-    indexer = GitHubIndexer(user_login)
-    indexer.update_internal(dbroot)
-    db.close()
-
-
-# Helpers
-# .............................................................................
-
-def get_language_list(dbroot):
-    if '__ENTRIES_WITH_LANGUAGES__' in dbroot:
-        return dbroot['__ENTRIES_WITH_LANGUAGES__']
-    else:
-        return None
-
-
-def get_readme_list(db):
-    if '__ENTRIES_WITH_READMES__' in db:
-        return db['__ENTRIES_WITH_READMES__']
-    else:
-        return None
-
-
-def summarize_language_stats(dbroot):
-    msg('')
-    msg('Gathering programming language statistics ...')
-    entries_with_languages = get_language_list(dbroot)
-    entries = 0                     # Total number of entries seen.
-    language_counts = {}            # Pairs of language:count.
-    for name in entries_with_languages:
-        entries += 1
-        if (entries + 1) % 100000 == 0:
-            print(entries + 1, '...', end='', flush=True)
-        if name in dbroot:
-            entry = dbroot[name]
-        else:
-            msg('Cannot find entry "{}" in database'.format(name))
-            continue
-        if not isinstance(entry, RepoData):
-            msg('Entry "{}" is not a RepoData'.format(name))
-            continue
-        if entry.languages != None:
-            for lang in entry.languages:
-                if lang in language_counts:
-                    language_counts[lang] = language_counts[lang] + 1
-                else:
-                    language_counts[lang] = 1
-    msg('Language usage counts:')
-    for key, value in sorted(language_counts.items(), key=operator.itemgetter(1),
-                             reverse=True):
-        msg('  {0:<24s}: {1}'.format(Language.name(key), value))
-
 
 
 # Plac annotations for main function arguments
@@ -255,13 +121,14 @@ def summarize_language_stats(dbroot):
 # Plac automatically adds a -h argument for help, so no need to do it here.
 
 main.__annotations__ = dict(
-    user_login    = ('use specified account login',   'option', 'a'),
-    index_create  = ('create index',                  'flag',   'c'),
-    index_langs   = ('add programming languages',     'flag',   'l'),
-    index_print   = ('print index',                   'flag',   'p'),
-    index_readmes = ('add README files',              'flag',   'r'),
-    summarize     = ('summarize database',            'flag',   's'),
-    update        = ('update internal database data', 'flag',   'u'),
+    user_login     = ('use specified account login',            'option', 'a'),
+    index_create   = ('create basic index',                     'flag',   'c'),
+    index_langs    = ('gather programming languages',           'flag',   'l'),
+    index_print    = ('print index',                            'flag',   'p'),
+    index_readmes  = ('gather README files',                    'flag',   'r'),
+    locate_by_lang = ('locate Java & Python projects',          'flag',   'L'),
+    summarize      = ('summarize database',                     'flag',   's'),
+    update         = ('update internal database data',          'flag',   'u'),
 )
 
 # Entry point
