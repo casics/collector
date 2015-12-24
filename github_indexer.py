@@ -156,10 +156,12 @@ class GitHubIndexer():
 
     def add_record_from_github3(self, repo, db, languages=None):
         # Match impedances between github3's record format and ours.
+        msg(repo.fork)
         db[repo.full_name] = RepoEntry(host=Host.GITHUB,
                                        id=repo.id,
                                        path=repo.full_name,
                                        description=repo.description,
+                                       copy_of=repo.fork,   # Only a Boolean.
                                        owner=repo.owner.login,
                                        owner_type=repo.owner.type,
                                        languages=languages)
@@ -406,7 +408,7 @@ class GitHubIndexer():
                     continue
 
                 if repo.full_name in db:
-                    msg('Skipping {} ({}) -- already in the database'.format(
+                    msg('Skipping {} ({}) -- already known'.format(
                         repo.full_name, repo.id))
                     continue
                 else:
