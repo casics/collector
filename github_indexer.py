@@ -163,12 +163,10 @@ class GitHubIndexer():
                                        owner=repo.owner.login,
                                        owner_type=repo.owner.type,
                                        languages=languages)
-        transaction.commit()
 
 
     def set_last_seen(self, id, db):
         db['__SINCE_MARKER__'] = id
-        transaction.commit()
 
 
     def get_last_seen(self, db):
@@ -180,7 +178,6 @@ class GitHubIndexer():
 
     def set_language_list(self, value, db):
         db['__ENTRIES_WITH_LANGUAGES__'] = value
-        transaction.commit()
 
 
     def get_language_list(self, db):
@@ -192,7 +189,6 @@ class GitHubIndexer():
 
     def set_readme_list(self, value, db):
         db['__ENTRIES_WITH_READMES__'] = value
-        transaction.commit()
 
 
     def get_readme_list(self, db):
@@ -204,7 +200,6 @@ class GitHubIndexer():
 
     def set_total_entries(self, count, db):
         db['__TOTAL_ENTRIES__'] = count
-        transaction.commit()
 
 
     def get_total_entries(self, db):
@@ -360,7 +355,11 @@ class GitHubIndexer():
             raise RuntimeError('{}: {}'.format(request.status_code, msg))
 
 
-    def create_index(self, db):
+    def recreate_index(self, db):
+        self.create_index(db, False)
+
+
+    def create_index(self, db, continuation=True):
         msg('Examining our current database')
         count = self.get_total_entries(db)
         if not count:
@@ -371,7 +370,11 @@ class GitHubIndexer():
 
         last_seen = self.get_last_seen(db)
         if last_seen:
-            msg('We last read repository id = {}'.format(last_seen))
+            if continuation:
+                msg('Will contiue from last-read repository id {}'.format(last_seen))
+            else:
+                msg('Ignoring last repository id {} -- starting from the top'.format(last_seen))
+                last_seen = None
         else:
             msg('No record of the last entry seen.  Starting from the top.')
 
@@ -403,7 +406,8 @@ class GitHubIndexer():
                     continue
 
                 if repo.full_name in db:
-                    # print('Skipping {} -- already in the database'.format(repo.full_name))
+                    msg('Skipping {} ({}) -- already in the database'.format(
+                        repo.full_name, repo.id))
                     continue
                 else:
                     try:
@@ -422,6 +426,7 @@ class GitHubIndexer():
 
                 loop_count += 1
                 if loop_count > 100:
+                    transaction.commit()
                     calls_left = self.api_calls_left()
                     if calls_left > 1:
                         loop_count = 0
@@ -442,6 +447,7 @@ class GitHubIndexer():
                 msg('github3 generated an exception: {0}'.format(err))
                 failures += 1
 
+        transaction.commit()
         if failures >= self._max_failures:
             msg('Stopping because of too many repeated failures.')
         else:
@@ -484,6 +490,7 @@ class GitHubIndexer():
                     failures += 1
             if count % 100 == 0:
                 self.set_language_list(entries_with_languages, db)
+                transaction.commit()
                 msg('{} [{:2f}]'.format(count, time() - start))
                 start = time()
             if failures >= self._max_failures:
@@ -491,6 +498,7 @@ class GitHubIndexer():
                 break
 
         self.set_language_list(entries_with_languages, db)
+        transaction.commit()
         msg('')
         msg('Done.')
 
@@ -535,8 +543,8 @@ class GitHubIndexer():
                     msg('Access error for "{}": {}'.format(entry.path, err))
                     failures += 1
             if count % 100 == 0:
-                # The next call also does a commit, so we don't have to.
                 self.set_readme_list(entries_with_readmes, db)
+                transaction.commit()
                 msg('{} [{:2f}]'.format(count, time() - start))
                 start = time()
             if failures >= self._max_failures:
@@ -544,6 +552,7 @@ class GitHubIndexer():
                 break
 
         self.set_readme_list(entries_with_readmes, db)
+        transaction.commit()
         msg('')
         msg('Done.')
 
@@ -589,13 +598,11 @@ class GitHubIndexer():
                         if not Language.JAVA in entry.languages:
                             entry.languages.append(Language.JAVA)
                             entry._p_changed = True
-                            transaction.commit()
                         else:
                             msg('Already knew about {}'.format(repo.full_name))
                     else:
                         entry.languages = [Language.JAVA]
                         entry._p_changed = True
-                        transaction.commit()
                 else:
                     # We don't have this in our database.  Add a new record.
                     try:
@@ -615,6 +622,7 @@ class GitHubIndexer():
 
                 loop_count += 1
                 if loop_count > 100:
+                    transaction.commit()
                     calls_left = self.api_calls_left()
                     if calls_left > 1:
                         loop_count = 0
@@ -635,6 +643,7 @@ class GitHubIndexer():
                 msg('github3 generated an exception: {0}'.format(err))
                 failures += 1
 
+        transaction.commit()
         if failures >= self._max_failures:
             msg('Stopping because of too many repeated failures.')
         else:
