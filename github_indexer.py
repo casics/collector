@@ -156,7 +156,6 @@ class GitHubIndexer():
 
     def add_record_from_github3(self, repo, db, languages=None):
         # Match impedances between github3's record format and ours.
-        msg(repo.fork)
         db[repo.full_name] = RepoEntry(host=Host.GITHUB,
                                        id=repo.id,
                                        path=repo.full_name,
