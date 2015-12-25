@@ -24,7 +24,7 @@ import ZODB
 import persistent
 import transaction
 from base64 import b64encode
-from BTrees.OOBTree import TreeSet
+from BTrees.OOBTree import TreeSet, Bucket
 from datetime import datetime
 from time import time, sleep
 
@@ -166,46 +166,62 @@ class GitHubIndexer():
                                        languages=languages)
 
 
+    def get_globals(self, db):
+        if '__GLOBALS__' in db:
+            return db['__GLOBALS__']
+        else:
+            db['__GLOBALS__'] = Bucket()
+            return db['__GLOBALS__']
+
+
     def set_last_seen(self, id, db):
-        db['__SINCE_MARKER__'] = id
+        globals = self.get_globals(db)
+        globals['__SINCE_MARKER__'] = id
 
 
     def get_last_seen(self, db):
-        if '__SINCE_MARKER__' in db:
-            return db['__SINCE_MARKER__']
+        globals = self.get_globals(db)
+        if '__SINCE_MARKER__' in globals:
+            return globals['__SINCE_MARKER__']
         else:
             return None
 
 
     def set_language_list(self, value, db):
-        db['__ENTRIES_WITH_LANGUAGES__'] = value
+        globals = self.get_globals(db)
+        globals['__ENTRIES_WITH_LANGUAGES__'] = value
 
 
     def get_language_list(self, db):
-        if '__ENTRIES_WITH_LANGUAGES__' in db:
-            return db['__ENTRIES_WITH_LANGUAGES__']
+        globals = self.get_globals(db)
+        if '__ENTRIES_WITH_LANGUAGES__' in globals:
+            return globals['__ENTRIES_WITH_LANGUAGES__']
         else:
             return None
 
 
     def set_readme_list(self, value, db):
-        db['__ENTRIES_WITH_READMES__'] = value
+        globals = self.get_globals(db)
+        globals['__ENTRIES_WITH_READMES__'] = value
 
 
     def get_readme_list(self, db):
-        if '__ENTRIES_WITH_READMES__' in db:
-            return db['__ENTRIES_WITH_READMES__']
+        globals = self.get_globals(db)
+        if '__ENTRIES_WITH_READMES__' in globals:
+            return globals['__ENTRIES_WITH_READMES__']
         else:
             return None
 
 
     def set_total_entries(self, count, db):
-        db['__TOTAL_ENTRIES__'] = count
+        globals = self.get_globals(db)
+        globals['__TOTAL_ENTRIES__'] = count
 
 
     def get_total_entries(self, db):
-        if '__TOTAL_ENTRIES__' in db:
-            return db['__TOTAL_ENTRIES__']
+        globals = self.get_globals(db)
+        if '__TOTAL_ENTRIES__' in globals:
+            return globals['__TOTAL_ENTRIES__']
         else:
             msg('Did not find a count of entries.  Counting now...')
             count = len(db)
@@ -268,8 +284,11 @@ class GitHubIndexer():
 
     def print_index(self, db):
         '''Print the database contents.'''
-        if '__SINCE_MARKER__' in db:
-            msg('Last seen id: {}'.format(db['__SINCE_MARKER__']))
+        last_seen = self.get_last_seen(db)
+        if last_seen:
+            msg('Last seen id: {}'.format(last_seen))
+        else:
+            msg('No record of last seen id.')
         for key, entry in db.items():
             if not isinstance(entry, RepoEntry):
                 continue
@@ -287,7 +306,7 @@ class GitHubIndexer():
             msg('Database has {} total GitHub entries.'.format(total))
             last_seen = self.get_last_seen(db)
             if last_seen:
-                msg('Last seen GitHub id: {}.'.format(db['__SINCE_MARKER__']))
+                msg('Last seen GitHub id: {}.'.format(last_seen))
             else:
                 msg('No "last_seen" marker found.')
             entries_with_readmes = self.get_readme_list(db)
@@ -418,16 +437,17 @@ class GitHubIndexer():
                         count += 1
                         failures = 0
                     except Exception as err:
-                        msg('Exception when creating GitHubRecord: {0}'.format(err))
+                        msg('Exception when creating RepoEntry: {0}'.format(err))
                         failures += 1
                         continue
 
                 self.set_last_seen(repo.id, db)
                 self.set_total_entries(count, db)
 
+                transaction.commit()
+
                 loop_count += 1
                 if loop_count > 100:
-                    transaction.commit()
                     calls_left = self.api_calls_left()
                     if calls_left > 1:
                         loop_count = 0
@@ -462,7 +482,11 @@ class GitHubIndexer():
         if not entries_with_languages:
             entries_with_languages = TreeSet()
         failures = 0
-        for count, key in enumerate(db):
+
+        # We can't iterate on the database if the number of elements may be
+        # changing.  So, we make a copy of the keys (by making it a list),
+        # and then iterate over our local in-memory copy of the keys.
+        for count, key in enumerate(list(db.keys())):
             entry = db[key]
             if hasattr(entry, 'id'):
                 if key in entries_with_languages:
@@ -489,9 +513,9 @@ class GitHubIndexer():
                 except Exception as err:
                     msg('Access error for "{}": {}'.format(entry.path, err))
                     failures += 1
+            self.set_language_list(entries_with_languages, db)
+            transaction.commit()
             if count % 100 == 0:
-                self.set_language_list(entries_with_languages, db)
-                transaction.commit()
                 msg('{} [{:2f}]'.format(count, time() - start))
                 start = time()
             if failures >= self._max_failures:
@@ -511,13 +535,20 @@ class GitHubIndexer():
         if not entries_with_readmes:
             entries_with_readmes = TreeSet()
         failures = 0
-        for count, key in enumerate(db):
+
+        # We can't iterate on the database if the number of elements may be
+        # changing.  So, we make a copy of the keys (by making it a list),
+        # and then iterate over our local in-memory copy of the keys.
+        for count, key in enumerate(list(db.keys())):
             entry = db[key]
             if hasattr(entry, 'id'):
                 if key in entries_with_readmes:
                     continue
 
                 if hasattr(entry, 'readme') and entry.readme:
+                    # It has a non-empty readme field but it wasn't in our
+                    # list of entries with readme's.  Add it, but go on.
+                    entries_with_readmes.add(key)
                     continue
 
                 if self.api_calls_left() < 1:
@@ -538,14 +569,13 @@ class GitHubIndexer():
                         # The something can't be '', or None, or 0.  We use -1.
                         entry.readme = -1
                     entry._p_changed = True # Needed for ZODB record updates.
-                    db[key] = record
                     failures = 0
                 except Exception as err:
                     msg('Access error for "{}": {}'.format(entry.path, err))
                     failures += 1
+            self.set_readme_list(entries_with_readmes, db)
+            transaction.commit()
             if count % 100 == 0:
-                self.set_readme_list(entries_with_readmes, db)
-                transaction.commit()
                 msg('{} [{:2f}]'.format(count, time() - start))
                 start = time()
             if failures >= self._max_failures:
@@ -620,10 +650,10 @@ class GitHubIndexer():
 
                 self.set_last_seen(repo.id, db)
                 self.set_total_entries(count, db)
+                transaction.commit()
 
                 loop_count += 1
                 if loop_count > 100:
-                    transaction.commit()
                     calls_left = self.api_calls_left()
                     if calls_left > 1:
                         loop_count = 0
