@@ -488,11 +488,15 @@ class GitHubIndexer():
             except StopIteration:
                 msg('github3 repository iterator reports it is done')
                 break
-            except github3.ForbiddenError:
-                msg('GitHub API rate limit reached')
-                self.wait_for_reset()
-                loop_count = 0
-                calls_left = self.api_calls_left()
+            except github3.GitHubError as err:
+                if err.code == 403:
+                    msg('GitHub API rate limit reached')
+                    self.wait_for_reset()
+                    loop_count = 0
+                    calls_left = self.api_calls_left()
+                else:
+                    msg('github3 generated an exception: {0}'.format(err))
+                    failures += 1
             except Exception as err:
                 msg('github3 generated an exception: {0}'.format(err))
                 failures += 1
@@ -555,6 +559,15 @@ class GitHubIndexer():
                             calls_left = self.api_calls_left()
                             msg('Continuing')
 
+                except github3.GitHubError as err:
+                    if err.code == 403:
+                        msg('GitHub API rate limit reached')
+                        self.wait_for_reset()
+                        loop_count = 0
+                        calls_left = self.api_calls_left()
+                    else:
+                        msg('github3 generated an exception: {0}'.format(err))
+                        failures += 1
                 except Exception as err:
                     msg('github3 generated an exception: {0}'.format(err))
                     failures += 1
@@ -602,6 +615,15 @@ class GitHubIndexer():
                     # Misc bookkeeping.
                     entries_with_languages.add(key)
                     failures = 0
+                except github3.GitHubError as err:
+                    if err.code == 403:
+                        msg('GitHub API rate limit reached')
+                        self.wait_for_reset()
+                        loop_count = 0
+                        calls_left = self.api_calls_left()
+                    else:
+                        msg('github3 generated an exception: {0}'.format(err))
+                        failures += 1
                 except Exception as err:
                     msg('Access error for "{}": {}'.format(entry.path, err))
                     failures += 1
@@ -662,6 +684,15 @@ class GitHubIndexer():
                         entry.readme = -1
                     entry._p_changed = True # Needed for ZODB record updates.
                     failures = 0
+                except github3.GitHubError as err:
+                    if err.code == 403:
+                        msg('GitHub API rate limit reached')
+                        self.wait_for_reset()
+                        loop_count = 0
+                        calls_left = self.api_calls_left()
+                    else:
+                        msg('github3 generated an exception: {0}'.format(err))
+                        failures += 1
                 except Exception as err:
                     msg('Access error for "{}": {}'.format(entry.path, err))
                     failures += 1
@@ -757,11 +788,15 @@ class GitHubIndexer():
             except StopIteration:
                 msg('github3 search iterator reports it is done')
                 break
-            except github3.ForbiddenError:
-                msg('GitHub API rate limit reached')
-                self.wait_for_reset()
-                loop_count = 0
-                calls_left = self.api_calls_left()
+            except github3.GitHubError as err:
+                if err.code == 403:
+                    msg('GitHub API rate limit reached')
+                    self.wait_for_reset()
+                    loop_count = 0
+                    calls_left = self.api_calls_left()
+                else:
+                    msg('github3 generated an exception: {0}'.format(err))
+                    failures += 1
             except Exception as err:
                 msg('github3 generated an exception: {0}'.format(err))
                 failures += 1
