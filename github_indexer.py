@@ -548,6 +548,10 @@ class GitHubIndexer():
                     if not repo:
                         msg('{} not found in GitHub using API'.format(full_name))
                         continue
+                    if repo.full_name in db:
+                        msg('Already know {} renamed from {}'.format(repo.full_name,
+                                                                     full_name))
+                        continue
                     try:
                         self.add_record_from_github3(repo, db)
                         msg('{}: {} (GitHub id: {})'.format(count, repo.full_name,
