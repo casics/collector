@@ -530,27 +530,23 @@ class GitHubIndexer():
         with open(project_list, 'r') as f:
             for line in f:
                 try:
-                    line = line.strip()
-                    owner = line[:line.find('/')]
-                    project = line[line.find('/') + 1:]
+                    full_name = line.strip()
 
-                    test = requests.get('http://github.com/' + line)
-                    if test.status_code == 404:
-                        msg('{} not found in GitHub using https'.format(line))
+                    if full_name in db:
+                        msg('Skipping {} -- already known'.format(full_name))
                         continue
 
+                    test = requests.get('http://github.com/' + full_name)
+                    if test.status_code == 404:
+                        msg('{} not found in GitHub using https'.format(full_name))
+                        continue
+
+                    owner = full_name[:full_name.find('/')]
+                    project = full_name[full_name.find('/') + 1:]
                     repo = self.github().repository(owner, project)
 
                     if not repo:
-                        msg('{} not found in GitHub using API'.format(line))
-                        continue
-                    if repo and not repo.full_name:
-                        msg('Empty repo name in data returned by github3')
-                        failures += 1
-                        continue
-                    if repo and repo.full_name in db:
-                        msg('Skipping {} ({}) -- already known'.format(
-                            repo.full_name, repo.id))
+                        msg('{} not found in GitHub using API'.format(full_name))
                         continue
                     try:
                         self.add_record_from_github3(repo, db)
