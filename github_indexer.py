@@ -17,6 +17,7 @@ import operator
 import requests
 import json
 import http
+import requests
 import urllib
 import github3
 import zlib
@@ -533,10 +534,15 @@ class GitHubIndexer():
                     owner = line[:line.find('/')]
                     project = line[line.find('/') + 1:]
 
+                    test = requests.get('http://github.com/' + line)
+                    if test.status_code == 404:
+                        msg('{} not found in GitHub using https'.format(line))
+                        continue
+
                     repo = self.github().repository(owner, project)
 
                     if not repo:
-                        msg('{} not found in GitHub'.format(line))
+                        msg('{} not found in GitHub using API'.format(line))
                         continue
                     if repo and not repo.full_name:
                         msg('Empty repo name in data returned by github3')
