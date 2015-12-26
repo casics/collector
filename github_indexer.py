@@ -139,7 +139,7 @@ class GitHubIndexer():
             else:
                 return self.github().iter_all_repos()
         except Exception as err:
-            msg('github.all_repositories() failed with {0}'.format(err))
+            msg('github.iter_all_repos() failed with {0}'.format(err))
             sys.exit(1)
 
 
@@ -262,15 +262,20 @@ class GitHubIndexer():
         last_seen = 0
         entries = 0
         entries_with_languages = TreeSet()
+        entries_with_readmes = TreeSet()
         msg('Scanning every entry in the database ...')
         for key, entry in db.items():
             if not isinstance(entry, RepoEntry):
+                if '__GLOBALS__' in db and not entry == db['__GLOBALS__']:
+                    msg('Found non-RepoEntry: {}'.format(entry))
                 continue
             entries += 1
             if entry.id > last_seen:
                 last_seen = entry.id
             if entry.languages != None:
                 entries_with_languages.add(key)
+            if entry.readme != '':
+                entries_with_readmes.add(key)
             if (entries + 1) % 100000 == 0:
                 print(entries + 1, '...', end='', flush=True)
         msg('Done.')
@@ -280,6 +285,23 @@ class GitHubIndexer():
         msg('Last seen GitHub repository id: {}'.format(last_seen))
         self.set_language_list(entries_with_languages, db)
         msg('Number of entries with language info: {}'.format(len(entries_with_languages)))
+        self.set_readme_list(entries_with_readmes, db)
+        msg('Number of entries with README files: {}'.format(len(entries_with_readmes)))
+        transaction.commit()
+        # Remove stuff we kept at one time.
+        if '__SINCE_MARKER__' in db:
+            db['__SINCE_MARKER__'] = None
+            msg('Deleted top-level __SINCE_MARKER__')
+        if '__ENTRIES_WITH_LANGUAGES__' in db:
+            db['__ENTRIES_WITH_LANGUAGES__'] = None
+            msg('Deleted top-level __ENTRIES_WITH_LANGUAGES__')
+        if '__ENTRIES_WITH_READMES__' in db:
+            db['__ENTRIES_WITH_READMES__'] = None
+            msg('Deleted top-level __ENTRIES_WITH_READMES__')
+        if '__TOTAL_ENTRIES__' in db:
+            db['__TOTAL_ENTRIES__'] = None
+            msg('Deleted top-level __TOTAL_ENTRIES__')
+        transaction.commit()
 
 
     def print_index(self, db):
@@ -376,10 +398,17 @@ class GitHubIndexer():
 
 
     def recreate_index(self, db):
-        self.create_index(db, False)
+        self.create_index_full(db, False)
 
 
-    def create_index(self, db, continuation=True):
+    def create_index(self, db, project_list=None):
+        if project_list:
+            self.create_index_using_list(db, project_list)
+        else:
+            self.create_index_full(db)
+
+
+    def create_index_full(self, db, continuation=True):
         msg('Examining our current database')
         count = self.get_total_entries(db)
         if not count:
@@ -473,6 +502,69 @@ class GitHubIndexer():
             msg('Stopping because of too many repeated failures.')
         else:
             msg('Done.')
+
+
+    def create_index_using_list(self, db, project_list):
+        calls_left = self.api_calls_left()
+        msg('Initial GitHub API calls remaining: ', calls_left)
+
+        failures   = 0
+        loop_count = 0
+        count = 0
+        with open(project_list, 'r') as f:
+            for line in f:
+                try:
+                    line = line.strip()
+                    owner = line[:line.find('/')]
+                    project = line[line.find('/') + 1:]
+
+                    repo = self.github().repository(owner, project)
+
+                    if not repo:
+                        msg('{} not found in GitHub'.format(line))
+                        continue
+                    if repo and not repo.full_name:
+                        msg('Empty repo name in data returned by github3')
+                        failures += 1
+                        continue
+                    if repo and repo.full_name in db:
+                        msg('Skipping {} ({}) -- already known'.format(
+                            repo.full_name, repo.id))
+                        continue
+                    try:
+                        self.add_record_from_github3(repo, db)
+                        msg('{}: {} (GitHub id: {})'.format(count, repo.full_name,
+                                                            repo.id))
+                        count += 1
+                        failures = 0
+                    except Exception as err:
+                        msg('Exception when creating RepoEntry: {0}'.format(err))
+                        failures += 1
+                        continue
+
+                    self.set_total_entries(count, db)
+                    transaction.commit()
+
+                    loop_count += 1
+                    if loop_count > 100:
+                        calls_left = self.api_calls_left()
+                        if calls_left > 1:
+                            loop_count = 0
+                        else:
+                            self.wait_for_reset()
+                            calls_left = self.api_calls_left()
+                            msg('Continuing')
+
+                except Exception as err:
+                    msg('github3 generated an exception: {0}'.format(err))
+                    failures += 1
+
+                if failures >= self._max_failures:
+                    msg('Stopping because of too many repeated failures.')
+                    break
+
+        transaction.commit()
+        msg('Done.')
 
 
     def add_languages(self, db):
