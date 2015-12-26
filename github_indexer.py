@@ -174,48 +174,56 @@ class GitHubIndexer():
             return db['__GLOBALS__']
 
 
-    def set_last_seen(self, id, db):
+    def set_in_globals(self, var, value, db):
         globals = self.get_globals(db)
-        globals['__SINCE_MARKER__'] = id
+        globals[var] = value
+
+
+    def from_globals(self, db, var):
+        globals = self.get_globals(db)
+        return globals[var] if var in globals else None
+
+
+    def set_last_seen(self, id, db):
+        self.set_in_globals('__SINCE_MARKER__', id, db)
 
 
     def get_last_seen(self, db):
+        return self.from_globals(db, '__SINCE_MARKER__')
+
+
+    def set_highest_github_id(self, id, db):
+        self.set_in_globals('__HIGHEST_GITHUB_ID__', id, db)
+
+
+    def get_highest_github_id(self, db):
         globals = self.get_globals(db)
-        if '__SINCE_MARKER__' in globals:
-            return globals['__SINCE_MARKER__']
+        highest = self.from_globals(db, '__HIGHEST_GITHUB_ID__')
+        if highest:
+            return highest
         else:
-            return None
+            msg('Did not find a record of the highest id.  Searching now...')
+            pdb.set_trace()
 
 
     def set_language_list(self, value, db):
-        globals = self.get_globals(db)
-        globals['__ENTRIES_WITH_LANGUAGES__'] = value
+        self.set_in_globals('__ENTRIES_WITH_LANGUAGES__', value, db)
 
 
     def get_language_list(self, db):
-        globals = self.get_globals(db)
-        if '__ENTRIES_WITH_LANGUAGES__' in globals:
-            return globals['__ENTRIES_WITH_LANGUAGES__']
-        else:
-            return None
+        return self.from_globals(db, '__ENTRIES_WITH_LANGUAGES__')
 
 
     def set_readme_list(self, value, db):
-        globals = self.get_globals(db)
-        globals['__ENTRIES_WITH_READMES__'] = value
+        self.set_in_globals('__ENTRIES_WITH_READMES__', value, db)
 
 
     def get_readme_list(self, db):
-        globals = self.get_globals(db)
-        if '__ENTRIES_WITH_READMES__' in globals:
-            return globals['__ENTRIES_WITH_READMES__']
-        else:
-            return None
+        return self.from_globals(db, '__ENTRIES_WITH_READMES__')
 
 
     def set_total_entries(self, count, db):
-        globals = self.get_globals(db)
-        globals['__TOTAL_ENTRIES__'] = count
+        self.set_in_globals('__TOTAL_ENTRIES__', count, db)
 
 
     def get_total_entries(self, db):
@@ -274,7 +282,7 @@ class GitHubIndexer():
                 last_seen = entry.id
             if entry.languages != None:
                 entries_with_languages.add(key)
-            if entry.readme != '':
+            if entry.readme and entry.readme != '' and entry.readme != -1:
                 entries_with_readmes.add(key)
             if (entries + 1) % 100000 == 0:
                 print(entries + 1, '...', end='', flush=True)
@@ -470,7 +478,8 @@ class GitHubIndexer():
                         failures += 1
                         continue
 
-                self.set_last_seen(repo.id, db)
+                if repo.id > last_seen:
+                    self.set_last_seen(repo.id, db)
                 self.set_total_entries(count, db)
 
                 transaction.commit()
@@ -512,6 +521,8 @@ class GitHubIndexer():
         calls_left = self.api_calls_left()
         msg('Initial GitHub API calls remaining: ', calls_left)
 
+        last_seen = self.get_last_seen(db)
+
         failures   = 0
         loop_count = 0
         count = 0
@@ -546,7 +557,10 @@ class GitHubIndexer():
                         failures += 1
                         continue
 
+                    if repo.id > last_seen:
+                        self.set_last_seen(repo.id, db)
                     self.set_total_entries(count, db)
+
                     transaction.commit()
 
                     loop_count += 1
