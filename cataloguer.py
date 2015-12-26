@@ -80,21 +80,21 @@ from github_indexer import GitHubIndexer
 
 def main(user_login=None, index_create=False, index_recreate=False,
          index_langs=False, locate_by_lang=False, index_print=False,
-         index_readmes=False, summarize=False, update=False):
+         index_readmes=False, summarize=False, update=False, project_list=None):
     '''Generate or print index of projects found in repositories.'''
-    if   summarize:      do_action("print_summary",       user_login)
-    elif update:         do_action("update_internal",     user_login)
-    elif index_print:    do_action("print_index",         user_login)
-    elif index_create:   do_action("create_index",        user_login)
-    elif index_recreate: do_action("recreate_index",      user_login)
-    elif index_langs:    do_action("add_languages",       user_login)
-    elif index_readmes:  do_action("add_readmes",         user_login)
-    elif locate_by_lang: do_action("locate_by_languages", user_login)
+    if   summarize:       do_action("print_summary",       user_login)
+    elif update:          do_action("update_internal",     user_login)
+    elif index_print:     do_action("print_index",         user_login)
+    elif index_create:    do_action("create_index",        user_login, project_list)
+    elif index_recreate:  do_action("recreate_index",      user_login)
+    elif index_langs:     do_action("add_languages",       user_login)
+    elif index_readmes:   do_action("add_readmes",         user_login)
+    elif locate_by_lang:  do_action("locate_by_languages", user_login)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
 
-def do_action(action, user_login=None):
+def do_action(action, user_login=None, project_list=None):
     msg('Started at ', datetime.now())
     started = timer()
 
@@ -105,7 +105,10 @@ def do_action(action, user_login=None):
 
     indexer = GitHubIndexer(user_login)
     method = getattr(indexer, action, None)
-    method(dbroot)
+    if project_list:
+        method(dbroot, project_list)
+    else:
+        method(dbroot)
 
     # We're done.  Print some messages and exit.
 
@@ -125,6 +128,7 @@ main.__annotations__ = dict(
     user_login     = ('use specified account login',            'option', 'a'),
     index_create   = ('create basic index',                     'flag',   'c'),
     index_recreate = ('recreate basic index',                   'flag',   'C'),
+    project_list   = ('limit to projects listed in file',       'option', 'f'),
     index_langs    = ('gather programming languages',           'flag',   'l'),
     index_print    = ('print index',                            'flag',   'p'),
     index_readmes  = ('gather README files',                    'flag',   'r'),
