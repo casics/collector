@@ -116,14 +116,22 @@ class GitHubIndexer():
 
     def api_calls_left(self):
         '''Returns an integer.'''
-        rate_limit = self.github().rate_limit()
-        return rate_limit['resources']['core']['remaining']
+        try:
+            rate_limit = self.github().rate_limit()
+            return rate_limit['resources']['core']['remaining']
+        except Exception as err:
+            msg('Got exception asking about rate limit: {}'.format(err))
+            raise err
 
 
     def api_reset_time(self):
         '''Returns a timestamp value, i.e., seconds since epoch.'''
-        rate_limit = self.github().rate_limit()
-        return rate_limit['resources']['core']['reset']
+        try:
+            rate_limit = self.github().rate_limit()
+            return rate_limit['resources']['core']['reset']
+        except Exception as err:
+            msg('Got exception asking about reset time: {}'.format(err))
+            raise err
 
 
     def wait_for_reset(self):
@@ -586,7 +594,7 @@ class GitHubIndexer():
                         loop_count = 0
                         calls_left = self.api_calls_left()
                     else:
-                        msg('github3 generated an exception: {0}'.format(err))
+                        msg('GitHub API error: {0}'.format(err))
                         failures += 1
                 except Exception as err:
                     msg('github3 generated an exception: {0}'.format(err))
