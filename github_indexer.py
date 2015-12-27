@@ -395,6 +395,20 @@ class GitHubIndexer():
 
 
     def get_readme(self, entry):
+        # First try to get it via direct HTTP access, to save on API calls.
+        base_url = 'https://raw.githubusercontent.com/{}'.format(entry.path)
+        readme_1 = base_url + '/master/README.md'
+        readme_2 = base_url + '/master/README.rst'
+        readme_3 = base_url + '/master/README'
+        readme_4 = base_url + '/master/README.txt'
+        for alternative in [readme_1, readme_2, readme_3, readme_4]:
+            r = requests.get(alternative)
+            if r.status_code == 200:
+                return r.text
+            elif r.status_code < 300:
+                pdb.set_trace()
+
+        # Resort to GitHub API call.
         # Get the "preferred" readme file for a repository, as described in
         # https://developer.github.com/v3/repos/contents/
         # Using github3.py would need 2 api calls per repo to get this info.
@@ -683,28 +697,30 @@ class GitHubIndexer():
         # and then iterate over our local in-memory copy of the keys.
         for count, key in enumerate(list(db.keys())):
             entry = db[key]
-            if hasattr(entry, 'id'):
-                if key in entries_with_readmes:
-                    continue
+            if not hasattr(entry, 'id'):
+                continue
+            if key in entries_with_readmes:
+                continue
+            if entry.readme == -1:
+                # We already tried to get this one, and it was empty.
+                continue
+            if entry.readme:
+                # It has a non-empty readme field but it wasn't in our
+                # list of entries with readme's.  Add it and move along.
+                entries_with_readmes.add(key)
+                continue
 
-                if hasattr(entry, 'readme') and entry.readme:
-                    # It has a non-empty readme field but it wasn't in our
-                    # list of entries with readme's.  Add it, but go on.
-                    entries_with_readmes.add(key)
-                    continue
-
-                if self.api_calls_left() < 1:
-                    self.wait_for_reset()
-                    failures = 0
-                    msg('Continuing')
-
+            retry = True
+            while retry and failures < self._max_failures:
+                # Don't retry unless the problem may be transient.
+                retry = False
                 try:
                     readme = self.get_readme(entry)
                     if readme:
                         msg(entry.path)
-                        entries_with_readmes.add(key)
                         entry.readme = zlib.compress(bytes(readme, 'utf-8'))
                         entry._p_changed = True # Needed for ZODB record updates.
+                        entries_with_readmes.add(key)
                     else:
                         # If GitHub doesn't return a README file, we need to
                         # record something to indicate that we already tried.
@@ -719,19 +735,24 @@ class GitHubIndexer():
                         loop_count = 0
                         calls_left = self.api_calls_left()
                     else:
-                        msg('github3 generated an exception: {0}'.format(err))
+                        msg('GitHub API exception: {0}'.format(err))
                         failures += 1
+                        # Might be a network or other transient error.
+                        retry = True
                 except Exception as err:
-                    msg('Access error for "{}": {}'.format(entry.path, err))
+                    msg('Exception for "{}": {}'.format(entry.path, err))
                     failures += 1
+                    # Might be a network or other transient error.
+                    retry = True
+
+            if failures >= self._max_failures:
+                msg('Stopping because of too many consecutive failures')
+                break
             self.set_readme_list(entries_with_readmes, db)
             transaction.commit()
             if count % 100 == 0:
                 msg('{} [{:2f}]'.format(count, time() - start))
                 start = time()
-            if failures >= self._max_failures:
-                msg('Stopping because of too many consecutive failures')
-                break
 
         self.set_readme_list(entries_with_readmes, db)
         transaction.commit()
