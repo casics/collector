@@ -537,69 +537,69 @@ class GitHubIndexer():
         count = 0
         with open(project_list, 'r') as f:
             for line in f:
-                try:
-                    full_name = line.strip()
-
-                    if full_name in db:
-                        msg('Skipping {} -- already known'.format(full_name))
-                        continue
-
-                    test = requests.get('http://github.com/' + full_name)
-                    if test.status_code == 404:
-                        msg('{} not found in GitHub using https'.format(full_name))
-                        continue
-
-                    owner = full_name[:full_name.find('/')]
-                    project = full_name[full_name.find('/') + 1:]
-                    repo = self.github().repository(owner, project)
-
-                    if not repo:
-                        msg('{} not found in GitHub using API'.format(full_name))
-                        continue
-                    if repo.full_name in db:
-                        msg('Already know {} renamed from {}'.format(repo.full_name,
-                                                                     full_name))
-                        continue
+                retry = True
+                while retry and failures < self._max_failures:
+                    # Don't retry unless the problem may be transient.
+                    retry = False
                     try:
+                        full_name = line.strip()
+                        if full_name in db:
+                            msg('Skipping {} -- already known'.format(full_name))
+                            continue
+                        if requests.get('http://github.com/' + full_name).status_code == 404:
+                            msg('{} not found in GitHub using https'.format(full_name))
+                            continue
+
+                        owner = full_name[:full_name.find('/')]
+                        project = full_name[full_name.find('/') + 1:]
+                        repo = self.github().repository(owner, project)
+
+                        if not repo:
+                            msg('{} not found in GitHub using API'.format(full_name))
+                            continue
+                        if repo.full_name in db:
+                            msg('Already know {} renamed from {}'.format(repo.full_name,
+                                                                         full_name))
+                            continue
+
                         self.add_record_from_github3(repo, db)
                         msg('{}: {} (GitHub id: {})'.format(count, repo.full_name,
                                                             repo.id))
                         count += 1
                         failures = 0
-                    except Exception as err:
-                        msg('Exception when creating RepoEntry: {0}'.format(err))
-                        failures += 1
-                        continue
+                        if repo.id > last_seen:
+                            self.set_last_seen(repo.id, db)
+                        self.set_total_entries(count, db)
 
-                    if repo.id > last_seen:
-                        self.set_last_seen(repo.id, db)
-                    self.set_total_entries(count, db)
+                        transaction.commit()
 
-                    transaction.commit()
-
-                    loop_count += 1
-                    if loop_count > 100:
-                        calls_left = self.api_calls_left()
-                        if calls_left > 1:
-                            loop_count = 0
-                        else:
-                            self.wait_for_reset()
+                        loop_count += 1
+                        if loop_count > 100:
                             calls_left = self.api_calls_left()
-                            msg('Continuing')
-
-                except github3.GitHubError as err:
-                    if err.code == 403:
-                        msg('GitHub API rate limit reached')
-                        self.wait_for_reset()
-                        loop_count = 0
-                        calls_left = self.api_calls_left()
-                    else:
-                        msg('GitHub API error: {0}'.format(err))
+                            if calls_left > 1:
+                                loop_count = 0
+                            else:
+                                self.wait_for_reset()
+                                calls_left = self.api_calls_left()
+                                msg('Continuing')
+                    except github3.GitHubError as err:
+                        if err.code == 403:
+                            msg('GitHub API rate limit reached')
+                            self.wait_for_reset()
+                            loop_count = 0
+                            calls_left = self.api_calls_left()
+                        else:
+                            msg('GitHub API error: {0}'.format(err))
+                            failures += 1
+                            # Might be a network or other transient error.
+                            retry = True
+                    except Exception as err:
+                        msg('github3 generated an exception: {0}'.format(err))
                         failures += 1
-                except Exception as err:
-                    msg('github3 generated an exception: {0}'.format(err))
-                    failures += 1
+                        # Might be a network or other transient error.
+                        retry = True
 
+                # Stop for-loop if we accumulate too many failures.
                 if failures >= self._max_failures:
                     msg('Stopping because of too many repeated failures.')
                     break
