@@ -293,9 +293,9 @@ class GitHubIndexer():
         self.set_last_seen(last_seen, db)
         msg('Last seen GitHub repository id: {}'.format(last_seen))
         self.set_language_list(entries_with_languages, db)
-        msg('Number of entries with language info: {}'.format(len(entries_with_languages)))
+        msg('Number of entries with language info: {}'.format(entries_with_languages.__len__()))
         self.set_readme_list(entries_with_readmes, db)
-        msg('Number of entries with README files: {}'.format(len(entries_with_readmes)))
+        msg('Number of entries with README files: {}'.format(entries_with_readmes.__len__()))
         transaction.commit()
         # Remove stuff we kept at one time.
         if '__SINCE_MARKER__' in db:
@@ -342,12 +342,12 @@ class GitHubIndexer():
                 msg('No "last_seen" marker found.')
             entries_with_readmes = self.get_readme_list(db)
             if entries_with_readmes:
-                msg('Database has {} entries with README files.'.format(len(entries_with_readmes)))
+                msg('Database has {} entries with README files.'.format(entries_with_readmes.__len__()))
             else:
                 msg('No entries recorded with README files.')
             entries_with_languages = self.get_language_list(db)
             if entries_with_languages:
-                msg('Database has {} entries with language info.'.format(len(entries_with_languages)))
+                msg('Database has {} entries with language info.'.format(entries_with_languages.__len__()))
                 self.summarize_language_stats(db)
             else:
                 msg('No entries recorded with language info.')
