@@ -544,11 +544,11 @@ class GitHubIndexer():
         calls_left = self.api_calls_left()
         msg('Initial GitHub API calls remaining: ', calls_left)
 
+        count = self.get_total_entries(db)
         last_seen = self.get_last_seen(db)
 
         failures   = 0
         loop_count = 0
-        count = 0
         with open(project_list, 'r') as f:
             for line in f:
                 retry = True
