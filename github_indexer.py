@@ -383,7 +383,29 @@ class GitHubIndexer():
             return None
 
 
+    def extract_languages_from_html(self, html, entry):
+        marker = 'class="lang">'
+        marker_len = len(marker)
+        languages = []
+        startpoint = html.find(marker)
+        while startpoint > 0:
+            endpoint = html.find('<', startpoint)
+            languages.append(html[startpoint+marker_len : endpoint])
+            startpoint = html.find(marker, endpoint)
+        # Minor cleanup.
+        if 'Other' in languages:
+            languages.remove('Other')
+        return languages
+
+
     def get_languages(self, entry):
+        # First try to get it by scraping the HTTP web page for the project.
+        # This saves an API call.
+
+        r = requests.get('http://github.com/' + entry.path)
+        if r.status_code == 200:
+            return self.extract_languages_from_html(r.text, entry)
+
         # Using github3.py would need 2 api calls per repo to get this info.
         # Here we do direct access to bring it to 1 api call.
         url = 'https://api.github.com/repos/{}/languages'.format(entry.path)
