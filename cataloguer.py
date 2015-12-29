@@ -89,7 +89,7 @@ def main(user_login=None, index_create=False, index_recreate=False,
     elif index_recreate:  do_action("recreate_index",      user_login)
     elif index_langs:     do_action("add_languages",       user_login)
     elif index_readmes:   do_action("add_readmes",         user_login)
-    elif locate_by_lang:  do_action("locate_by_languages", user_login)
+#    elif locate_by_lang:  do_action("locate_by_languages", user_login)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
@@ -132,7 +132,7 @@ main.__annotations__ = dict(
     index_langs    = ('gather programming languages',           'flag',   'l'),
     index_print    = ('print index',                            'flag',   'p'),
     index_readmes  = ('gather README files',                    'flag',   'r'),
-    locate_by_lang = ('locate Java & Python projects',          'flag',   'L'),
+#    locate_by_lang = ('locate Java & Python projects',          'flag',   'L'),
     summarize      = ('summarize database',                     'flag',   's'),
     update         = ('update internal database data',          'flag',   'u'),
 )
