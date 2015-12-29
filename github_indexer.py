@@ -25,7 +25,8 @@ import ZODB
 import persistent
 import transaction
 from base64 import b64encode
-from BTrees.OOBTree import TreeSet, Bucket
+from BTrees.IOBTree import TreeSet
+from BTrees.OOBTree import Bucket
 from datetime import datetime
 from time import time, sleep
 
@@ -165,22 +166,24 @@ class GitHubIndexer():
 
     def add_record_from_github3(self, repo, db, languages=None):
         # Match impedances between github3's record format and ours.
-        db[repo.full_name] = RepoEntry(host=Host.GITHUB,
-                                       id=repo.id,
-                                       path=repo.full_name,
-                                       description=repo.description,
-                                       copy_of=repo.fork,   # Only a Boolean.
-                                       owner=repo.owner.login,
-                                       owner_type=repo.owner.type,
-                                       languages=languages)
+        # Our database keys are the integer identifiers assigned to repos.
+        db[repo.id] = RepoEntry(host=Host.GITHUB,
+                                id=repo.id,
+                                path=repo.full_name,
+                                description=repo.description,
+                                copy_of=repo.fork,   # Only a Boolean.
+                                owner=repo.owner.login,
+                                owner_type=repo.owner.type,
+                                languages=languages)
 
 
     def get_globals(self, db):
-        if '__GLOBALS__' in db:
-            return db['__GLOBALS__']
+        # We keep globals at position 0 in the database, since there is no
+        if 0 in db:
+            return db[0]
         else:
-            db['__GLOBALS__'] = Bucket()
-            return db['__GLOBALS__']
+            db[0] = Bucket()            # This needs to be an OOBucket.
+            return db[0]
 
 
     def set_in_globals(self, var, value, db):
@@ -194,20 +197,20 @@ class GitHubIndexer():
 
 
     def set_last_seen(self, id, db):
-        self.set_in_globals('__SINCE_MARKER__', id, db)
+        self.set_in_globals('last seen id', id, db)
 
 
     def get_last_seen(self, db):
-        return self.from_globals(db, '__SINCE_MARKER__')
+        return self.from_globals(db, 'last seen id')
 
 
     def set_highest_github_id(self, id, db):
-        self.set_in_globals('__HIGHEST_GITHUB_ID__', id, db)
+        self.set_in_globals('highest id number', id, db)
 
 
     def get_highest_github_id(self, db):
         globals = self.get_globals(db)
-        highest = self.from_globals(db, '__HIGHEST_GITHUB_ID__')
+        highest = self.from_globals(db, 'highest id number')
         if highest:
             return highest
         else:
@@ -216,32 +219,44 @@ class GitHubIndexer():
 
 
     def set_language_list(self, value, db):
-        self.set_in_globals('__ENTRIES_WITH_LANGUAGES__', value, db)
+        self.set_in_globals('entries with languages', value, db)
 
 
     def get_language_list(self, db):
-        return self.from_globals(db, '__ENTRIES_WITH_LANGUAGES__')
+        lang_list = self.from_globals(db, 'entries with languages')
+        if lang_list:
+            return lang_list
+        else:
+            msg('Did not find list of entries with languages. Creating it.')
+            self.set_in_globals('entries with languages', TreeSet(), db)
+            return self.from_globals(db, 'entries with languages')
 
 
     def set_readme_list(self, value, db):
-        self.set_in_globals('__ENTRIES_WITH_READMES__', value, db)
+        self.set_in_globals('entries with readmes', value, db)
 
 
     def get_readme_list(self, db):
-        return self.from_globals(db, '__ENTRIES_WITH_READMES__')
+        readme_list = self.from_globals(db, 'entries with readmes')
+        if readme_list:
+            return readme_list
+        else:
+            msg('Did not find list of entries with readmes. Creating it.')
+            self.set_in_globals('entries with readmes', TreeSet(), db)
+            return self.from_globals(db, 'entries with readmes')
 
 
     def set_total_entries(self, count, db):
-        self.set_in_globals('__TOTAL_ENTRIES__', count, db)
+        self.set_in_globals('total entries', count, db)
 
 
     def get_total_entries(self, db):
         globals = self.get_globals(db)
-        if '__TOTAL_ENTRIES__' in globals:
-            return globals['__TOTAL_ENTRIES__']
+        if 'total entries' in globals:
+            return globals['total entries']
         else:
             msg('Did not find a count of entries.  Counting now...')
-            count = len(db)
+            count = len(list(db.keys()))
             self.set_total_entries(count, db)
             return count
 
@@ -277,47 +292,32 @@ class GitHubIndexer():
 
     def update_internal(self, db):
         last_seen = 0
-        entries = 0
-        entries_with_languages = TreeSet()
-        entries_with_readmes = TreeSet()
+        num_entries = 0
+        entries_with_languages = self.get_language_list(db)
+        entries_with_readmes = self.get_readme_list(db)
         msg('Scanning every entry in the database ...')
         for key, entry in db.items():
             if not isinstance(entry, RepoEntry):
-                if '__GLOBALS__' in db and not entry == db['__GLOBALS__']:
-                    msg('Found non-RepoEntry: {}'.format(entry))
                 continue
-            entries += 1
+            num_entries += 1
             if entry.id > last_seen:
                 last_seen = entry.id
             if entry.languages != None:
                 entries_with_languages.add(key)
             if entry.readme and entry.readme != '' and entry.readme != -1:
                 entries_with_readmes.add(key)
-            if (entries + 1) % 100000 == 0:
-                print(entries + 1, '...', end='', flush=True)
+            if (num_entries + 1) % 100000 == 0:
+                print(num_entries + 1, '...', end='', flush=True)
         msg('Done.')
-        self.set_total_entries(entries, db)
-        msg('Database has {} total GitHub entries.'.format(entries))
+        self.set_total_entries(num_entries, db)
+        msg('Database has {} total GitHub entries.'.format(num_entries))
         self.set_last_seen(last_seen, db)
+        self.set_highest_github_id(last_seen, db)
         msg('Last seen GitHub repository id: {}'.format(last_seen))
         self.set_language_list(entries_with_languages, db)
         msg('Number of entries with language info: {}'.format(entries_with_languages.__len__()))
         self.set_readme_list(entries_with_readmes, db)
         msg('Number of entries with README files: {}'.format(entries_with_readmes.__len__()))
-        transaction.commit()
-        # Remove stuff we kept at one time.
-        if '__SINCE_MARKER__' in db:
-            db['__SINCE_MARKER__'] = None
-            msg('Deleted top-level __SINCE_MARKER__')
-        if '__ENTRIES_WITH_LANGUAGES__' in db:
-            db['__ENTRIES_WITH_LANGUAGES__'] = None
-            msg('Deleted top-level __ENTRIES_WITH_LANGUAGES__')
-        if '__ENTRIES_WITH_READMES__' in db:
-            db['__ENTRIES_WITH_READMES__'] = None
-            msg('Deleted top-level __ENTRIES_WITH_READMES__')
-        if '__TOTAL_ENTRIES__' in db:
-            db['__TOTAL_ENTRIES__'] = None
-            msg('Deleted top-level __TOTAL_ENTRIES__')
         transaction.commit()
 
 
@@ -466,7 +466,7 @@ class GitHubIndexer():
         count = self.get_total_entries(db)
         if not count:
             msg('Did not find a count of entries.  Counting now...')
-            count = len(db)
+            count = db.__len__()
             self.set_total_entries(count, db)
         msg('There are {} entries in the database'.format(count))
 
@@ -502,12 +502,7 @@ class GitHubIndexer():
                     failures += 1
                     continue
 
-                if not repo.full_name:
-                    msg('Empty repo name in data returned by github3 iterator')
-                    failures += 1
-                    continue
-
-                if repo.full_name in db:
+                if repo.id in db:
                     msg('Skipping {} ({}) -- already known'.format(
                         repo.full_name, repo.id))
                     continue
@@ -562,94 +557,102 @@ class GitHubIndexer():
             msg('Done.')
 
 
-    def create_index_using_list(self, db, project_list):
-        calls_left = self.api_calls_left()
-        msg('Initial GitHub API calls remaining: ', calls_left)
+    # This will no longer work, with the switch to using id numbers as keys.
+    # Keeping it here because the sequence of steps took time to work out
+    # and may be applicable to other things.
 
-        count = self.get_total_entries(db)
-        last_seen = self.get_last_seen(db)
+    # def create_index_using_list(self, db, project_list):
+    #     calls_left = self.api_calls_left()
+    #     msg('Initial GitHub API calls remaining: ', calls_left)
 
-        failures   = 0
-        loop_count = 0
-        with open(project_list, 'r') as f:
-            for line in f:
-                retry = True
-                while retry and failures < self._max_failures:
-                    # Don't retry unless the problem may be transient.
-                    retry = False
-                    try:
-                        full_name = line.strip()
-                        if full_name in db:
-                            msg('Skipping {} -- already known'.format(full_name))
-                            continue
-                        if requests.get('http://github.com/' + full_name).status_code == 404:
-                            msg('{} not found in GitHub using https'.format(full_name))
-                            continue
+    #     count = self.get_total_entries(db)
+    #     if not count:
+    #         msg('Did not find a count of entries.  Counting now...')
+    #         count = db.__len__()
+    #         self.set_total_entries(count, db)
+    #     msg('There are {} entries in the database'.format(count))
 
-                        owner = full_name[:full_name.find('/')]
-                        project = full_name[full_name.find('/') + 1:]
-                        repo = self.github().repository(owner, project)
+    #     last_seen = self.get_last_seen(db)
 
-                        if not repo:
-                            msg('{} not found in GitHub using API'.format(full_name))
-                            continue
-                        if repo.full_name in db:
-                            msg('Already know {} renamed from {}'.format(repo.full_name,
-                                                                         full_name))
-                            continue
+    #     failures   = 0
+    #     loop_count = 0
+    #     with open(project_list, 'r') as f:
+    #         for line in f:
+    #             retry = True
+    #             while retry and failures < self._max_failures:
+    #                 # Don't retry unless the problem may be transient.
+    #                 retry = False
+    #                 try:
+    #                     full_name = line.strip()
+    #                     if full_name in db:
+    #                         msg('Skipping {} -- already known'.format(full_name))
+    #                         continue
+    #                     if requests.get('http://github.com/' + full_name).status_code == 404:
+    #                         msg('{} not found in GitHub using https'.format(full_name))
+    #                         continue
 
-                        self.add_record_from_github3(repo, db)
-                        msg('{}: {} (GitHub id: {})'.format(count, repo.full_name,
-                                                            repo.id))
-                        count += 1
-                        failures = 0
-                        if repo.id > last_seen:
-                            self.set_last_seen(repo.id, db)
-                        self.set_total_entries(count, db)
+    #                     owner = full_name[:full_name.find('/')]
+    #                     project = full_name[full_name.find('/') + 1:]
+    #                     repo = self.github().repository(owner, project)
 
-                        transaction.commit()
+    #                     if not repo:
+    #                         msg('{} not found in GitHub using API'.format(full_name))
+    #                         continue
+    #                     if repo.full_name in db:
+    #                         msg('Already know {} renamed from {}'.format(repo.full_name,
+    #                                                                      full_name))
+    #                         continue
 
-                        loop_count += 1
-                        if loop_count > 100:
-                            calls_left = self.api_calls_left()
-                            if calls_left > 1:
-                                loop_count = 0
-                            else:
-                                self.wait_for_reset()
-                                calls_left = self.api_calls_left()
-                                msg('Continuing')
-                    except github3.GitHubError as err:
-                        if err.code == 403:
-                            msg('GitHub API rate limit reached')
-                            self.wait_for_reset()
-                            loop_count = 0
-                            calls_left = self.api_calls_left()
-                        else:
-                            msg('GitHub API error: {0}'.format(err))
-                            failures += 1
-                            # Might be a network or other transient error.
-                            retry = True
-                    except Exception as err:
-                        msg('github3 generated an exception: {0}'.format(err))
-                        failures += 1
-                        # Might be a network or other transient error.
-                        retry = True
+    #                     self.add_record_from_github3(repo, db)
+    #                     msg('{}: {} (GitHub id: {})'.format(count, repo.full_name,
+    #                                                         repo.id))
+    #                     count += 1
+    #                     failures = 0
+    #                     if repo.id > last_seen:
+    #                         self.set_last_seen(repo.id, db)
+    #                     self.set_total_entries(count, db)
 
-                # Stop for-loop if we accumulate too many failures.
-                if failures >= self._max_failures:
-                    msg('Stopping because of too many repeated failures.')
-                    break
+    #                     transaction.commit()
 
-        transaction.commit()
-        msg('Done.')
+    #                     loop_count += 1
+    #                     if loop_count > 100:
+    #                         calls_left = self.api_calls_left()
+    #                         if calls_left > 1:
+    #                             loop_count = 0
+    #                         else:
+    #                             self.wait_for_reset()
+    #                             calls_left = self.api_calls_left()
+    #                             msg('Continuing')
+    #                 except github3.GitHubError as err:
+    #                     if err.code == 403:
+    #                         msg('GitHub API rate limit reached')
+    #                         self.wait_for_reset()
+    #                         loop_count = 0
+    #                         calls_left = self.api_calls_left()
+    #                     else:
+    #                         msg('GitHub API error: {0}'.format(err))
+    #                         failures += 1
+    #                         # Might be a network or other transient error.
+    #                         retry = True
+    #                 except Exception as err:
+    #                     msg('github3 generated an exception: {0}'.format(err))
+    #                     failures += 1
+    #                     # Might be a network or other transient error.
+    #                     retry = True
+
+    #             # Stop for-loop if we accumulate too many failures.
+    #             if failures >= self._max_failures:
+    #                 msg('Stopping because of too many repeated failures.')
+    #                 break
+
+    #     transaction.commit()
+    #     msg('Done.')
 
 
     def add_languages(self, db):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
         start = time()
         entries_with_languages = self.get_language_list(db)
-        if not entries_with_languages:
-            entries_with_languages = TreeSet()
         failures = 0
 
         # We can't iterate on the database if the number of elements may be
@@ -710,8 +713,6 @@ class GitHubIndexer():
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
         start = time()
         entries_with_readmes = self.get_readme_list(db)
-        if not entries_with_readmes:
-            entries_with_readmes = TreeSet()
         failures = 0
 
         # We can't iterate on the database if the number of elements may be
@@ -739,7 +740,7 @@ class GitHubIndexer():
                 try:
                     readme = self.get_readme(entry)
                     if readme:
-                        msg(entry.path)
+                        msg('{} (#{})'.format(entry.path, entry.id))
                         entry.readme = zlib.compress(bytes(readme, 'utf-8'))
                         entry._p_changed = True # Needed for ZODB record updates.
                         entries_with_readmes.add(key)
@@ -782,98 +783,98 @@ class GitHubIndexer():
         msg('Done.')
 
 
-    def locate_by_languages(self, db):
-        msg('Examining our current database')
-        count = self.get_total_entries(db)
-        msg('There are {} entries in the database'.format(count))
+    # def locate_by_languages(self, db):
+    #     msg('Examining our current database')
+    #     count = self.get_total_entries(db)
+    #     msg('There are {} entries in the database'.format(count))
 
-        # We have to do 2 separate searches because there does not seem to
-        # be an "or" operator in the GitHub search syntax.
+    #     # We have to do 2 separate searches because there does not seem to
+    #     # be an "or" operator in the GitHub search syntax.
 
-        # The iterator returned by github.search_repositories() is
-        # continuous; behind the scenes, it uses the GitHub API to get new
-        # data when needed.  Each API call nets 100 repository records, so
-        # after we go through 100 objects in the 'for' loop below, we expect
-        # that github.all_repositories() will have made another call, and the
-        # rate-limited number of API calls left in this rate-limited period
-        # will go down by 1.  When we hit the rate limit max, we pause until
-        # the reset time.
+    #     # The iterator returned by github.search_repositories() is
+    #     # continuous; behind the scenes, it uses the GitHub API to get new
+    #     # data when needed.  Each API call nets 100 repository records, so
+    #     # after we go through 100 objects in the 'for' loop below, we expect
+    #     # that github.all_repositories() will have made another call, and the
+    #     # rate-limited number of API calls left in this rate-limited period
+    #     # will go down by 1.  When we hit the rate limit max, we pause until
+    #     # the reset time.
 
-        calls_left = self.api_calls_left()
-        msg('Initial GitHub API calls remaining: ', calls_left)
+    #     calls_left = self.api_calls_left()
+    #     msg('Initial GitHub API calls remaining: ', calls_left)
 
-        # Java
+    #     # Java
 
-        search_iterator = self.get_search_iterator("language:java")
-        loop_count    = 0
-        failures      = 0
-        while failures < self._max_failures:
-            try:
-                search_result = next(search_iterator)
-                if search_result is None:
-                    msg('Empty return value from github3 iterator')
-                    failures += 1
-                    continue
+    #     search_iterator = self.get_search_iterator("language:java")
+    #     loop_count    = 0
+    #     failures      = 0
+    #     while failures < self._max_failures:
+    #         try:
+    #             search_result = next(search_iterator)
+    #             if search_result is None:
+    #                 msg('Empty return value from github3 iterator')
+    #                 failures += 1
+    #                 continue
 
-                repo = search_result.repository
-                if repo.full_name in db:
-                    # We have this in our database.  Good.
-                    entry = db[repo.full_name]
-                    if entry.languages:
-                        if not Language.JAVA in entry.languages:
-                            entry.languages.append(Language.JAVA)
-                            entry._p_changed = True
-                        else:
-                            msg('Already knew about {}'.format(repo.full_name))
-                    else:
-                        entry.languages = [Language.JAVA]
-                        entry._p_changed = True
-                else:
-                    # We don't have this in our database.  Add a new record.
-                    try:
-                        add_record(repo, db, languages=[Language.JAVA])
-                        msg('{}: {} (GitHub id: {})'.format(count,
-                                                            repo.full_name,
-                                                            repo.id))
-                        count += 1
-                        failures = 0
-                    except Exception as err:
-                        msg('Exception when creating RepoEntry: {0}'.format(err))
-                        failures += 1
-                        continue
+    #             repo = search_result.repository
+    #             if repo.full_name in db:
+    #                 # We have this in our database.  Good.
+    #                 entry = db[repo.full_name]
+    #                 if entry.languages:
+    #                     if not Language.JAVA in entry.languages:
+    #                         entry.languages.append(Language.JAVA)
+    #                         entry._p_changed = True
+    #                     else:
+    #                         msg('Already knew about {}'.format(repo.full_name))
+    #                 else:
+    #                     entry.languages = [Language.JAVA]
+    #                     entry._p_changed = True
+    #             else:
+    #                 # We don't have this in our database.  Add a new record.
+    #                 try:
+    #                     add_record(repo, db, languages=[Language.JAVA])
+    #                     msg('{}: {} (GitHub id: {})'.format(count,
+    #                                                         repo.full_name,
+    #                                                         repo.id))
+    #                     count += 1
+    #                     failures = 0
+    #                 except Exception as err:
+    #                     msg('Exception when creating RepoEntry: {0}'.format(err))
+    #                     failures += 1
+    #                     continue
 
-                self.set_last_seen(repo.id, db)
-                self.set_total_entries(count, db)
-                transaction.commit()
+    #             self.set_last_seen(repo.id, db)
+    #             self.set_total_entries(count, db)
+    #             transaction.commit()
 
-                loop_count += 1
-                if loop_count > 100:
-                    calls_left = self.api_calls_left()
-                    if calls_left > 1:
-                        loop_count = 0
-                    else:
-                        self.wait_for_reset()
-                        calls_left = self.api_calls_left()
-                        msg('Continuing')
+    #             loop_count += 1
+    #             if loop_count > 100:
+    #                 calls_left = self.api_calls_left()
+    #                 if calls_left > 1:
+    #                     loop_count = 0
+    #                 else:
+    #                     self.wait_for_reset()
+    #                     calls_left = self.api_calls_left()
+    #                     msg('Continuing')
 
-            except StopIteration:
-                msg('github3 search iterator reports it is done')
-                break
-            except github3.GitHubError as err:
-                if err.code == 403:
-                    msg('GitHub API rate limit reached')
-                    self.wait_for_reset()
-                    loop_count = 0
-                    calls_left = self.api_calls_left()
-                else:
-                    msg('github3 generated an exception: {0}'.format(err))
-                    failures += 1
-            except Exception as err:
-                msg('github3 generated an exception: {0}'.format(err))
-                failures += 1
+    #         except StopIteration:
+    #             msg('github3 search iterator reports it is done')
+    #             break
+    #         except github3.GitHubError as err:
+    #             if err.code == 403:
+    #                 msg('GitHub API rate limit reached')
+    #                 self.wait_for_reset()
+    #                 loop_count = 0
+    #                 calls_left = self.api_calls_left()
+    #             else:
+    #                 msg('github3 generated an exception: {0}'.format(err))
+    #                 failures += 1
+    #         except Exception as err:
+    #             msg('github3 generated an exception: {0}'.format(err))
+    #             failures += 1
 
-        transaction.commit()
-        if failures >= self._max_failures:
-            msg('Stopping because of too many repeated failures.')
-        else:
-            msg('Done.')
+    #     transaction.commit()
+    #     if failures >= self._max_failures:
+    #         msg('Stopping because of too many repeated failures.')
+    #     else:
+    #         msg('Done.')
