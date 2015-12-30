@@ -738,9 +738,11 @@ class GitHubIndexer():
                 # Don't retry unless the problem may be transient.
                 retry = False
                 try:
+                    t1 = time()
                     readme = self.get_readme(entry)
+                    t2 = time()
                     if readme:
-                        msg('{} (#{})'.format(entry.path, entry.id))
+                        msg('{} (#{}) in {:.2f}s'.format(entry.path, entry.id, t2-t1))
                         entry.readme = zlib.compress(bytes(readme, 'utf-8'))
                         entry._p_changed = True # Needed for ZODB record updates.
                         entries_with_readmes.add(key)
