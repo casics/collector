@@ -338,6 +338,21 @@ class GitHubIndexer():
                 msg('  -- no description --')
 
 
+    def print_indexed_ids(self, db):
+        '''Print the known repository identifiers in the database.'''
+        total_recorded = self.get_total_entries(db)
+        msg('total count: ', total_recorded)
+        count = 0
+        for key, entry in db.items():
+            if not isinstance(entry, RepoEntry):
+                continue
+            msg(entry.id)
+            count += 1
+        if count != total_recorded:
+            msg('Error: {} expected in database, but counted {}'.format(
+                total_recorded, count))
+
+
     def print_summary(self, db):
         '''Print a summary of the database, without listing every entry.'''
         total = self.get_total_entries(db)
@@ -406,6 +421,7 @@ class GitHubIndexer():
         if r.status_code == 200:
             return self.extract_languages_from_html(r.text, entry)
 
+        # Failed to get it by scraping.  Try the GitHub API.
         # Using github3.py would need 2 api calls per repo to get this info.
         # Here we do direct access to bring it to 1 api call.
         url = 'https://api.github.com/repos/{}/languages'.format(entry.path)
