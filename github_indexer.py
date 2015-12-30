@@ -343,10 +343,9 @@ class GitHubIndexer():
         total_recorded = self.get_total_entries(db)
         msg('total count: ', total_recorded)
         count = 0
-        for key, entry in db.items():
-            if not isinstance(entry, RepoEntry):
-                continue
-            msg(entry.id)
+        for key in db.keys():
+            if key == 0: continue
+            msg(key)
             count += 1
         if count != total_recorded:
             msg('Error: {} expected in database, but counted {}'.format(
