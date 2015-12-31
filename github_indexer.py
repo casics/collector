@@ -418,7 +418,7 @@ class GitHubIndexer():
 
         r = requests.get('http://github.com/' + entry.path)
         if r.status_code == 200:
-            return self.extract_languages_from_html(r.text, entry)
+            return ('http', self.extract_languages_from_html(r.text, entry))
 
         # Failed to get it by scraping.  Try the GitHub API.
         # Using github3.py would need 2 api calls per repo to get this info.
@@ -426,9 +426,9 @@ class GitHubIndexer():
         url = 'https://api.github.com/repos/{}/languages'.format(entry.path)
         response = self.direct_api_call(url)
         if response == None:
-            return []
+            return ('api', [])
         else:
-            return json.loads(response)
+            return ('api', json.loads(response))
 
 
     def get_readme(self, entry):
@@ -441,7 +441,7 @@ class GitHubIndexer():
         for alternative in [readme_1, readme_2, readme_3, readme_4]:
             r = requests.get(alternative)
             if r.status_code == 200:
-                return r.text
+                return ('http', r.text)
             elif r.status_code < 300:
                 pdb.set_trace()
 
@@ -451,7 +451,7 @@ class GitHubIndexer():
         # Using github3.py would need 2 api calls per repo to get this info.
         # Here we do direct access to bring it to 1 api call.
         url = 'https://api.github.com/repos/{}/readme'.format(entry.path)
-        return self.direct_api_call(url)
+        return ('api', self.direct_api_call(url))
 
 
     def raise_exception_for_response(self, request):
@@ -663,33 +663,49 @@ class GitHubIndexer():
     #     transaction.commit()
     #     msg('Done.')
 
-
-    def add_languages(self, db):
+    def add_languages(self, db, project_list=None):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
-        start = time()
         entries_with_languages = self.get_language_list(db)
         failures = 0
+        start = time()
 
-        # We can't iterate on the database if the number of elements may be
-        # changing.  So, we make a copy of the keys (by making it a list),
-        # and then iterate over our local in-memory copy of the keys.
-        for count, key in enumerate(list(db.keys())):
+        # If we're iterating over the entire database, we have to make a copy
+        # of the keys list because we can't iterate on the database if the
+        # number of elements may be changing.  Making this list is incredibly
+        # inefficient and takes many minutes to create.
+
+        id_list = project_list if project_list else list(db.keys())
+        for count, key in enumerate(id_list):
+            if key not in db:
+                msg('repository id {} is unknown'.format(key))
+                continue
             entry = db[key]
-            if hasattr(entry, 'id'):
-                if key in entries_with_languages:
-                    continue
+            if not hasattr(entry, 'id'):
+                continue
+            if key in entries_with_languages:
+                continue
+            if entry.languages != None:
+                # It has a non-empty language field but it wasn't in our list
+                # of entries with language info.  Add it and move along.
+                entries_with_languages.add(key)
+                continue
 
-                if hasattr(entry, 'languages') and entry.languages != None:
-                    entries_with_languages.add(key)
-                    continue
+            if self.api_calls_left() < 1:
+                self.wait_for_reset()
+                failures = 0
+                msg('Continuing')
 
-                if self.api_calls_left() < 1:
-                    self.wait_for_reset()
-                    failures = 0
-                    msg('Continuing')
-
+            retry = True
+            while retry and failures < self._max_failures:
+                # Don't retry unless the problem may be transient.
+                retry = False
                 try:
-                    raw_languages = [lang for lang in self.get_languages(entry)]
+                    t1 = time()
+                    (method, results) = self.get_languages(entry)
+                    t2 = time()
+                    msg('{} (#{}) in {:.2f}s via {}'.format(entry.path, entry.id,
+                                                            t2-t1, method))
+                    raw_languages = [lang for lang in results]
                     languages = [Language.identifier(x) for x in raw_languages]
                     entry.languages = languages
                     entry._p_changed = True # Needed for ZODB record updates.
@@ -704,19 +720,24 @@ class GitHubIndexer():
                         loop_count = 0
                         calls_left = self.api_calls_left()
                     else:
-                        msg('github3 generated an exception: {0}'.format(err))
+                        msg('GitHub API exception: {0}'.format(err))
                         failures += 1
+                        # Might be a network or other transient error.
+                        retry = True
                 except Exception as err:
-                    msg('Access error for "{}": {}'.format(entry.path, err))
+                    msg('Exception for "{}": {}'.format(entry.path, err))
                     failures += 1
+                    # Might be a network or other transient error.
+                    retry = True
+
+            if failures >= self._max_failures:
+                msg('Stopping because of too many consecutive failures')
+                break
             self.set_language_list(entries_with_languages, db)
             transaction.commit()
             if count % 100 == 0:
                 msg('{} [{:2f}]'.format(count, time() - start))
                 start = time()
-            if failures >= self._max_failures:
-                msg('Stopping because of too many consecutive failures')
-                break
 
         self.set_language_list(entries_with_languages, db)
         transaction.commit()
@@ -724,16 +745,22 @@ class GitHubIndexer():
         msg('Done.')
 
 
-    def add_readmes(self, db):
+    def add_readmes(self, db, project_list=None):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
-        start = time()
         entries_with_readmes = self.get_readme_list(db)
         failures = 0
+        start = time()
 
-        # We can't iterate on the database if the number of elements may be
-        # changing.  So, we make a copy of the keys (by making it a list),
-        # and then iterate over our local in-memory copy of the keys.
-        for count, key in enumerate(list(db.keys())):
+        # If we're iterating over the entire database, we have to make a copy
+        # of the keys list because we can't iterate on the database if the
+        # number of elements may be changing.  Making this list is incredibly
+        # inefficient and takes many minutes to create.
+
+        id_list = project_list if project_list else list(db.keys())
+        for count, key in enumerate(id_list):
+            if key not in db:
+                msg('repository id {} is unknown'.format(key))
+                continue
             entry = db[key]
             if not hasattr(entry, 'id'):
                 continue
@@ -754,10 +781,12 @@ class GitHubIndexer():
                 retry = False
                 try:
                     t1 = time()
-                    readme = self.get_readme(entry)
+                    (method, readme) = self.get_readme(entry)
                     t2 = time()
                     if readme:
-                        msg('{} (#{}) in {:.2f}s'.format(entry.path, entry.id, t2-t1))
+                        msg('{} (#{}) in {:.2f}s via {}'.format(entry.path,
+                                                                entry.id, t2-t1,
+                                                                method))
                         entry.readme = zlib.compress(bytes(readme, 'utf-8'))
                         entry._p_changed = True # Needed for ZODB record updates.
                         entries_with_readmes.add(key)
