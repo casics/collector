@@ -724,6 +724,11 @@ class GitHubIndexer():
                         failures += 1
                         # Might be a network or other transient error.
                         retry = True
+                except EnumerationValueError as err:
+                    # Encountered a language string that's not in our enum.
+                    # Print a message and go on.
+                    msg('Encountered unrecognized language: {}'.format(err))
+                    retry = False
                 except Exception as err:
                     msg('Exception for "{}": {}'.format(entry.path, err))
                     failures += 1
