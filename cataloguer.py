@@ -88,7 +88,7 @@ def main(user_login=None, index_create=False, index_recreate=False,
     elif index_print:     do_action("print_index",          user_login)
     elif index_ids:       do_action("print_indexed_ids",    user_login)
     elif index_create:    do_action("create_index",         user_login, id_list)
-    elif index_recreate:  do_action("recreate_index",       user_login)
+    elif index_recreate:  do_action("recreate_index",       user_login, id_list)
     elif index_langs:     do_action("add_languages",        user_login, id_list)
     elif index_readmes:   do_action("add_readmes",          user_login, id_list)
 #    elif locate_by_lang:  do_action("locate_by_languages", user_login)
