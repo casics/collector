@@ -105,22 +105,24 @@ def do_action(action, user_login=None, id_list=None):
 
     # Do each host in turn.  (Currently only GitHub.)
 
-    indexer = GitHubIndexer(user_login)
-    method = getattr(indexer, action, None)
-    if id_list:
-        with open(id_list) as f:
-            repositories = [int(x) for x in f.read().splitlines()]
-        method(dbroot, repositories)
-    else:
-        method(dbroot)
+    try:
+        indexer = GitHubIndexer(user_login)
+        method = getattr(indexer, action, None)
+        if id_list:
+            with open(id_list) as f:
+                repositories = [int(x) for x in f.read().splitlines()]
+            method(dbroot, repositories)
+        else:
+            method(dbroot)
+    finally:
+        transaction.commit()
+        db.close()
 
     # We're done.  Print some messages and exit.
 
     stopped = timer()
     msg('Stopped at {}'.format(datetime.now()))
     msg('Time elapsed: {}'.format(stopped - started))
-
-    db.close()
 
 
 # Plac annotations for main function arguments
