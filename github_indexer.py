@@ -448,12 +448,29 @@ class GitHubIndexer():
         startpoint = html.find(marker)
         while startpoint > 0:
             endpoint = html.find('<', startpoint)
-            languages.append(html[startpoint+marker_len : endpoint])
+            languages.append(html[startpoint + marker_len : endpoint])
             startpoint = html.find(marker, endpoint)
         # Minor cleanup.
         if 'Other' in languages:
             languages.remove('Other')
         return languages
+
+
+    def extract_fork_from_html(self, html, entry):
+        spanstart = html.find('<span class="fork-flag">')
+        if spanstart > 0:
+            marker = '<span class="text">forked from <a href="'
+            marker_len = len(marker)
+            startpoint= html.find(marker, spanstart)
+            if startpoint > 0:
+                endpoint = html.find('"', startpoint + marker_len)
+                return html[startpoint + marker_len + 1 : endpoint]
+            else:
+                # Found the section marker, but couldn't parse the text for
+                # some reason.  Just return a Boolean value.
+                return True
+        else:
+            return False
 
 
     def get_languages(self, entry):
@@ -462,7 +479,10 @@ class GitHubIndexer():
 
         r = requests.get('http://github.com/' + entry.owner + '/' + entry.name)
         if r.status_code == 200:
-            return ('http', self.extract_languages_from_html(r.text, entry))
+            # While we're here, let's pull out some other data.
+            languages = self.extract_languages_from_html(r.text, entry)
+            copy_info = self.extract_fork_from_html(r.text, entry)
+            return ('http', languages, copy_info)
 
         # Failed to get it by scraping.  Try the GitHub API.
         # Using github3.py would need 2 api calls per repo to get this info.
@@ -471,9 +491,9 @@ class GitHubIndexer():
                                                                     entry.name)
         response = self.direct_api_call(url)
         if response == None:
-            return ('api', [])
+            return ('api', [], None)
         else:
-            return ('api', json.loads(response))
+            return ('api', json.loads(response), None)
 
 
     def get_readme(self, entry):
@@ -660,16 +680,22 @@ class GitHubIndexer():
                 retry = False
                 try:
                     t1 = time()
-                    (method, results) = self.get_languages(entry)
+                    (method, results, copy_info) = self.get_languages(entry)
                     t2 = time()
-                    msg('{}/{} (#{}) in {:.2f}s via {}'.format(entry.owner, entry.name,
-                                                               entry.id, t2-t1, method))
+                    msg('{}/{} (#{}{}) in {:.2f}s via {}'.format(
+                        entry.owner, entry.name, entry.id,
+                        ', a fork of {}'.format(copy_info) if copy_info else '',
+                        t2-t1, method))
                     raw_languages = [lang for lang in results]
                     languages = [Language.identifier(x) for x in raw_languages]
                     entry.languages = languages
                     entry.refreshed = now_timestamp()
+                    if copy_info:
+                        # Don't change copy_of if we couldn't read it while
+                        # looking for languages, because we might have stored
+                        # it previously using a different data source.
+                        entry.copy_of = copy_info
                     entry._p_changed = True # Needed for ZODB record updates.
-
                     # Misc bookkeeping.
                     entries_with_languages.add(key)
                     failures = 0
