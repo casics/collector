@@ -165,37 +165,65 @@ class GitHubIndexer():
 
 
     def add_record_from_github3(self, repo, db, languages=None):
-        # Match impedances between github3's record format and ours.  Our
-        # database keys are the integer identifiers assigned to repos.  If
-        # overwriting an existing entry, save content that needs separate calls.
-        identifier = repo if isinstance(repo, int) else repo.id
-        if identifier in db:
-            old_entry = db[identifier]
-            db[identifier] = RepoEntry(host=Host.GITHUB,
-                                       id=identifier,
-                                       path=repo.full_name,
-                                       description=repo.description,
-                                       readme=old_entry.readme,
-                                       copy_of=repo.fork,   # Only a Boolean.
-                                       deleted=old_entry.deleted,
-                                       owner=repo.owner.login,
-                                       owner_type=repo.owner.type,
-                                       languages=old_entry.languages,
-                                       topics=old_entry.topics,
-                                       categories=old_entry.categories)
+        # Match impedances between github3's record format and ours.
+        if repo.id in db:
+            # Update an existing entry.  The github3 record has less info
+            # than we keep, so grab the old values for the other fields, but
+            # update the 'refreshed' field value to now.
+            old_entry = db[repo.id]
+            db[repo.id].name        = repo.name
+            db[repo.id].owner       = repo.owner.login
+            db[repo.id].description = repo.description
+            db[repo.id].copy_of     = repo.fork        # Only a Boolean.
+            db[repo.id].owner_type  = repo.owner.type
+            db[repo.id].refreshed   = now_timestamp()
         else:
-            db[identifier] = RepoEntry(host=Host.GITHUB,
-                                       id=identifier,
-                                       path=repo.full_name,
-                                       description=repo.description,
-                                       copy_of=repo.fork,   # Only a Boolean.
-                                       owner=repo.owner.login,
-                                       owner_type=repo.owner.type,
-                                       languages=languages)
+            # New entry.
+            db[repo.id] = RepoData(host=Host.GITHUB,
+                                   id=repo.id,
+                                   name=repo.name,
+                                   owner=repo.owner.login,
+                                   description=repo.description,
+                                   copy_of=repo.fork,  # Only a Boolean.
+                                   owner_type=repo.owner.type,
+                                   refreshed=now_timestamp())
+
+
+    # def add_record_from_github3(self, repo, db, languages=None):
+    #     # Match impedances between github3's record format and ours.
+    #     #
+    #     # Our database keys are the integer identifiers assigned to repos.
+    #     identifier = repo if isinstance(repo, int) else repo.id
+    #     if identifier in db:
+    #         # If overwriting an existing entry, save content that needs
+    #         # separate calls but otherwise take the info from the 
+    #         old_entry = db[identifier]
+    #         db[identifier] = RepoEntry(host=Host.GITHUB,
+    #                                    id=identifier,
+    #                                    path=repo.full_name,
+    #                                    description=repo.description,
+    #                                    readme=old_entry.readme,
+    #                                    copy_of=repo.fork,   # Only a Boolean.
+    #                                    deleted=old_entry.deleted,
+    #                                    owner=repo.owner.login,
+    #                                    owner_type=repo.owner.type,
+    #                                    languages=old_entry.languages,
+    #                                    topics=old_entry.topics,
+    #                                    categories=old_entry.categories)
+    #     else:
+    #         db[identifier] = RepoEntry(host=Host.GITHUB,
+    #                                    id=identifier,
+    #                                    path=repo.full_name,
+    #                                    description=repo.description,
+    #                                    copy_of=repo.fork,   # Only a Boolean.
+    #                                    owner=repo.owner.login,
+    #                                    owner_type=repo.owner.type,
+    #                                    languages=languages)
 
 
     def get_globals(self, db):
-        # We keep globals at position 0 in the database, since there is no
+        # We keep globals at position 0 in the database, since repo identifiers
+        # in GitHub start at 1.
         if 0 in db:
             return db[0]
         else:
@@ -241,7 +269,7 @@ class GitHubIndexer():
 
     def get_language_list(self, db):
         lang_list = self.from_globals(db, 'entries with languages')
-        if lang_list:
+        if lang_list != None:           # Need explicit test against None.
             return lang_list
         else:
             msg('Did not find list of entries with languages. Creating it.')
@@ -255,7 +283,7 @@ class GitHubIndexer():
 
     def get_readme_list(self, db):
         readme_list = self.from_globals(db, 'entries with readmes')
-        if readme_list:
+        if readme_list != None:           # Need explicit test against None.
             return readme_list
         else:
             msg('Did not find list of entries with readmes. Creating it.')
@@ -292,9 +320,6 @@ class GitHubIndexer():
             else:
                 msg('Cannot find entry "{}" in database'.format(name))
                 continue
-            if not isinstance(entry, RepoEntry):
-                msg('Entry "{}" is not a RepoEntry'.format(name))
-                continue
             if entry.languages != None:
                 for lang in entry.languages:
                     if lang in language_counts:
@@ -314,7 +339,7 @@ class GitHubIndexer():
         entries_with_readmes = self.get_readme_list(db)
         msg('Scanning every entry in the database ...')
         for key, entry in db.items():
-            if not isinstance(entry, RepoEntry):
+            if not hasattr(entry, 'id'):
                 continue
             num_entries += 1
             if entry.id > last_seen:
@@ -346,7 +371,7 @@ class GitHubIndexer():
         else:
             msg('No record of last seen id.')
         for key, entry in db.items():
-            if not isinstance(entry, RepoEntry):
+            if not hasattr(entry, 'id'):
                 continue
             print(entry)
             if entry.description:
@@ -380,14 +405,16 @@ class GitHubIndexer():
             else:
                 msg('No "last_seen" marker found.')
             entries_with_readmes = self.get_readme_list(db)
-            if entries_with_readmes:
+            if entries_with_readmes != None:
                 msg('Database has {} entries with README files.'.format(entries_with_readmes.__len__()))
             else:
                 msg('No entries recorded with README files.')
             entries_with_languages = self.get_language_list(db)
-            if entries_with_languages:
-                msg('Database has {} entries with language info.'.format(entries_with_languages.__len__()))
-                self.summarize_language_stats(db)
+            if entries_with_languages != None:
+                num = entries_with_languages.__len__()
+                msg('Database has {} entries with language info.'.format(num))
+                if num != 0:
+                    self.summarize_language_stats(db)
             else:
                 msg('No entries recorded with language info.')
         else:
@@ -433,14 +460,15 @@ class GitHubIndexer():
         # First try to get it by scraping the HTTP web page for the project.
         # This saves an API call.
 
-        r = requests.get('http://github.com/' + entry.path)
+        r = requests.get('http://github.com/' + entry.owner + '/' + entry.name)
         if r.status_code == 200:
             return ('http', self.extract_languages_from_html(r.text, entry))
 
         # Failed to get it by scraping.  Try the GitHub API.
         # Using github3.py would need 2 api calls per repo to get this info.
         # Here we do direct access to bring it to 1 api call.
-        url = 'https://api.github.com/repos/{}/languages'.format(entry.path)
+        url = 'https://api.github.com/repos/{}/{}/languages'.format(entry.owner,
+                                                                    entry.name)
         response = self.direct_api_call(url)
         if response == None:
             return ('api', [])
@@ -450,7 +478,7 @@ class GitHubIndexer():
 
     def get_readme(self, entry):
         # First try to get it via direct HTTP access, to save on API calls.
-        base_url = 'https://raw.githubusercontent.com/{}'.format(entry.path)
+        base_url = 'https://raw.githubusercontent.com/' + entry.owner + '/' + entry.name
         readme_1 = base_url + '/master/README.md'
         readme_2 = base_url + '/master/README.rst'
         readme_3 = base_url + '/master/README'
@@ -467,7 +495,7 @@ class GitHubIndexer():
         # https://developer.github.com/v3/repos/contents/
         # Using github3.py would need 2 api calls per repo to get this info.
         # Here we do direct access to bring it to 1 api call.
-        url = 'https://api.github.com/repos/{}/readme'.format(entry.path)
+        url = 'https://api.github.com/repos/{}/{}/readme' + entry.owner + '/' + entry.name
         return ('api', self.direct_api_call(url))
 
 
@@ -483,7 +511,7 @@ class GitHubIndexer():
 
 
     def recreate_index(self, db, project_list=None):
-        self.create_index_full(db, project_list, False)
+        self.create_index(db, project_list, continuation=False)
 
 
     def create_index(self, db, project_list=None, continuation=True):
@@ -496,7 +524,7 @@ class GitHubIndexer():
                 msg('Continuing from highest-known id {}'.format(last_seen))
             else:
                 msg('Ignoring last id {} -- starting from the top'.format(last_seen))
-                last_seen = None
+                last_seen = -1
         else:
             msg('No record of the last repo id seen.  Starting from the top.')
             last_seen = -1
@@ -518,7 +546,7 @@ class GitHubIndexer():
             repo_iterator = self.get_repo_iterator(last_seen)
         loop_count    = 0
         failures      = 0
-        start = time()
+        start         = time()
         while failures < self._max_failures:
             try:
                 repo = next(repo_iterator)
@@ -534,9 +562,7 @@ class GitHubIndexer():
                     if identifier in db:
                         msg('Overwriting entry for #{}'.format(identifier))
                         entry = db[identifier]
-                        project_start = entry.path.find('/') + 1
-                        project = entry.path[project_start:]
-                        repo = self.github().repository(entry.owner, project)
+                        repo = self.github().repository(entry.owner, entry.name)
                         update_count = False
                     else:
                         msg('Skipping {} -- unknown repo id'.format(repo))
@@ -545,18 +571,18 @@ class GitHubIndexer():
                     identifier = repo.id
                     if identifier in db:
                         if continuation:
-                            msg('Skipping {} (id #{}) -- already known'.format(
-                                repo.full_name, identifier))
+                            msg('Skipping {}/{} (id #{}) -- already known'.format(
+                                repo.owner.login, repo.name, identifier))
                             continue
                         else:
-                            msg('Overwriting entry {} (id #{})'.format(
-                                repo.full_name, identifier))
+                            msg('Overwriting entry {}/{} (id #{})'.format(
+                                repo.owner.login, repo.name, identifier))
                             update_count = False
 
                 self.add_record_from_github3(repo, db)
-                msg('{}: {} (id #{})'.format(count, repo.full_name, identifier))
                 if update_count:
                     count += 1
+                    msg('{}: {}/{} (id #{})'.format(count, repo.owner.login, repo.name, identifier))
                     self.set_total_entries(count, db)
                 if identifier > last_seen:
                     self.set_last_seen(identifier, db)
@@ -636,11 +662,12 @@ class GitHubIndexer():
                     t1 = time()
                     (method, results) = self.get_languages(entry)
                     t2 = time()
-                    msg('{} (#{}) in {:.2f}s via {}'.format(entry.path, entry.id,
-                                                            t2-t1, method))
+                    msg('{}/{} (#{}) in {:.2f}s via {}'.format(entry.owner, entry.name,
+                                                               entry.id, t2-t1, method))
                     raw_languages = [lang for lang in results]
                     languages = [Language.identifier(x) for x in raw_languages]
                     entry.languages = languages
+                    entry.refreshed = now_timestamp()
                     entry._p_changed = True # Needed for ZODB record updates.
 
                     # Misc bookkeeping.
@@ -663,7 +690,7 @@ class GitHubIndexer():
                     msg('Encountered unrecognized language: {}'.format(err))
                     retry = False
                 except Exception as err:
-                    msg('Exception for "{}": {}'.format(entry.path, err))
+                    msg('Exception for "{}/{}": {}'.format(entry.owner, entry.name, err))
                     failures += 1
                     # Might be a network or other transient error.
                     retry = True
@@ -722,10 +749,11 @@ class GitHubIndexer():
                     (method, readme) = self.get_readme(entry)
                     t2 = time()
                     if readme:
-                        msg('{} (#{}) in {:.2f}s via {}'.format(entry.path,
-                                                                entry.id, t2-t1,
-                                                                method))
+                        msg('{}/{} (#{}) in {:.2f}s via {}'.format(entry.owner, entry.name,
+                                                                   entry.id, t2-t1,
+                                                                   method))
                         entry.readme = zlib.compress(bytes(readme, 'utf-8'))
+                        entry.refreshed = now_timestamp()
                         entry._p_changed = True # Needed for ZODB record updates.
                         entries_with_readmes.add(key)
                     else:
@@ -747,7 +775,7 @@ class GitHubIndexer():
                         # Might be a network or other transient error.
                         retry = True
                 except Exception as err:
-                    msg('Exception for "{}": {}'.format(entry.path, err))
+                    msg('Exception for "{}/{}": {}'.format(entry.owner, entry.name, err))
                     failures += 1
                     # Might be a network or other transient error.
                     retry = True
