@@ -441,7 +441,14 @@ class GitHubIndexer():
             return None
 
 
+    def get_home_page(self, entry):
+        r = requests.get('http://github.com/' + entry.owner + '/' + entry.name)
+        return r.text if r.status_code == 200 else None
+
+
     def extract_languages_from_html(self, html, entry):
+        if not html:
+            return False
         marker = 'class="lang">'
         marker_len = len(marker)
         languages = []
@@ -457,6 +464,8 @@ class GitHubIndexer():
 
 
     def extract_fork_from_html(self, html, entry):
+        if not html:
+            return False
         spanstart = html.find('<span class="fork-flag">')
         if spanstart > 0:
             marker = '<span class="text">forked from <a href="'
@@ -476,12 +485,11 @@ class GitHubIndexer():
     def get_languages(self, entry):
         # First try to get it by scraping the HTTP web page for the project.
         # This saves an API call.
-
-        r = requests.get('http://github.com/' + entry.owner + '/' + entry.name)
-        if r.status_code == 200:
-            # While we're here, let's pull out some other data.
-            languages = self.extract_languages_from_html(r.text, entry)
-            copy_info = self.extract_fork_from_html(r.text, entry)
+        html = self.get_home_page(entry)
+        if html:
+            languages = self.extract_languages_from_html(html, entry)
+            # While we're here, pull out some other data too:
+            copy_info = self.extract_fork_from_html(html, entry)
             return ('http', languages, copy_info)
 
         # Failed to get it by scraping.  Try the GitHub API.
@@ -515,8 +523,25 @@ class GitHubIndexer():
         # https://developer.github.com/v3/repos/contents/
         # Using github3.py would need 2 api calls per repo to get this info.
         # Here we do direct access to bring it to 1 api call.
-        url = 'https://api.github.com/repos/{}/{}/readme' + entry.owner + '/' + entry.name
+        url = 'https://api.github.com/repos/{}/{}/readme'.format(entry.owner, entry.name)
         return ('api', self.direct_api_call(url))
+
+
+    def get_fork_info(self, entry):
+        # As usual, try to get it by scraping the web page.
+        html = self.get_home_page(entry)
+        if html:
+            fork_info = self.extract_fork_from_html(html, entry)
+            if fork_info != None:
+                return ('http', fork_info)
+
+        # Failed to scrape it from the web page.  Resort to using the API.
+        url = 'https://api.github.com/repos/{}/{}/forks'.format(entry.owner, entry.name)
+        response = self.direct_api_call(url)
+        if response:
+            values = json.loads(response)
+            return ('api', values['fork'])
+        return None
 
 
     def raise_exception_for_response(self, request):
@@ -816,6 +841,77 @@ class GitHubIndexer():
                 start = time()
 
         self.set_readme_list(entries_with_readmes, db)
+        transaction.commit()
+        msg('')
+        msg('Done.')
+
+
+    def add_fork_info(self, db, project_list=None):
+        msg('Initial GitHub API calls remaining: ', self.api_calls_left())
+        failures = 0
+        start = time()
+
+        # If we're iterating over the entire database, we have to make a copy
+        # of the keys list because we can't iterate on the database if the
+        # number of elements may be changing.  Making this list is incredibly
+        # inefficient and takes many minutes to create.
+
+        id_list = project_list if project_list else list(db.keys())
+        for count, key in enumerate(id_list):
+            if key not in db:
+                msg('repository id {} is unknown'.format(key))
+                continue
+            entry = db[key]
+            if not hasattr(entry, 'id'):
+                continue
+            if entry.copy_of != None:
+                # Already have the info.
+                continue
+
+            retry = True
+            while retry and failures < self._max_failures:
+                # Don't retry unless the problem may be transient.
+                retry = False
+                try:
+                    t1 = time()
+                    (method, fork_info) = self.get_fork_info(entry)
+                    t2 = time()
+                    if fork_info != None:
+                        msg('{}/{} (#{}) in {:.2f}s via {}: {}'.format(
+                            entry.owner, entry.name, entry.id, t2-t1, method,
+                            'fork' if fork_info else 'not fork'))
+                        entry.copy_of = fork_info
+                        entry.refreshed = now_timestamp()
+                        entry._p_changed = True # Needed for ZODB record updates.
+                    else:
+                        msg('Failed to get fork info for {}/{} (#{})'.format(
+                            entry.owner, entry.name, entry.id))
+                    failures = 0
+                except github3.GitHubError as err:
+                    if err.code == 403:
+                        msg('GitHub API rate limit reached')
+                        self.wait_for_reset()
+                        loop_count = 0
+                        calls_left = self.api_calls_left()
+                    else:
+                        msg('GitHub API exception: {0}'.format(err))
+                        failures += 1
+                        # Might be a network or other transient error.
+                        retry = True
+                except Exception as err:
+                    msg('Exception for "{}/{}": {}'.format(entry.owner, entry.name, err))
+                    failures += 1
+                    # Might be a network or other transient error.
+                    retry = True
+
+            if failures >= self._max_failures:
+                msg('Stopping because of too many consecutive failures')
+                break
+            transaction.commit()
+            if count % 100 == 0:
+                msg('{} [{:2f}]'.format(count, time() - start))
+                start = time()
+
         transaction.commit()
         msg('')
         msg('Done.')

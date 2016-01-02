@@ -80,8 +80,8 @@ from github_indexer import GitHubIndexer
 
 def main(user_login=None, index_create=False, index_recreate=False,
          index_langs=False, locate_by_lang=False, index_print=False,
-         index_ids=False, index_readmes=False, summarize=False,
-         update=False, id_list=None):
+         index_ids=False, index_readmes=False, index_forks=False,
+         summarize=False, update=False, id_list=None):
     '''Generate or print index of projects found in repositories.'''
     if   summarize:       do_action("print_summary",        user_login)
     elif update:          do_action("update_internal",      user_login)
@@ -90,6 +90,7 @@ def main(user_login=None, index_create=False, index_recreate=False,
     elif index_create:    do_action("create_index",         user_login, id_list)
     elif index_recreate:  do_action("recreate_index",       user_login, id_list)
     elif index_langs:     do_action("add_languages",        user_login, id_list)
+    elif index_forks:     do_action("add_fork_info",        user_login, id_list)
     elif index_readmes:   do_action("add_readmes",          user_login, id_list)
 #    elif locate_by_lang:  do_action("locate_by_languages", user_login)
     else:
@@ -136,6 +137,7 @@ main.__annotations__ = dict(
     index_recreate = ('recreate basic index',                   'flag',   'C'),
     id_list        = ('limit to projects listed in file',       'option', 'f'),
     index_langs    = ('gather programming languages',           'flag',   'l'),
+    index_forks    = ('gather repository copy/fork status',     'flag',   'k'),
     index_print    = ('print index',                            'flag',   'p'),
     index_ids      = ('print known repository id numbers',      'flag',   'P'),
     index_readmes  = ('gather README files',                    'flag',   'r'),
