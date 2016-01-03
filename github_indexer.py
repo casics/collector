@@ -509,11 +509,11 @@ class GitHubIndexer():
             entry = db[key]
             if not hasattr(entry, 'id'):
                 continue
-            print(entry)
-            if entry.description:
-                msg(' ', entry.description.encode('ascii', 'ignore').decode('ascii'))
+            if entry.languages:
+                langs = ', '.join(Language.name(x) for x in entry.languages)
             else:
-                msg('  -- no description --')
+                langs = 'Unknown'
+            msg('GH #{} ({}/{}), langs: {}'.format(key, entry.owner, entry.name, langs))
 
 
     def print_indexed_ids(self, db):
