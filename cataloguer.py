@@ -79,7 +79,7 @@ from github_indexer import GitHubIndexer
 # should hopefully be possible.
 
 def main(user_login=None, index_create=False, index_recreate=False,
-         print_details=False, file=None, id=None,
+         print_details=False, file=None, id=None, languages=None,
          index_forks=False, index_langs=False, print_index=False,
          print_ids=False, index_readmes=False,
          summarize=False, update=False, locate_by_lang=False):
@@ -93,22 +93,24 @@ def main(user_login=None, index_create=False, index_recreate=False,
     else:
         id_list = None
 
-    if   summarize:       do_action("print_summary",        user_login)
-    elif update:          do_action("update_internal",      user_login)
-    elif print_ids:       do_action("print_indexed_ids",    user_login)
-    elif print_index:     do_action("print_index",          user_login, id_list)
-    elif print_details:   do_action("print_details",        user_login, id_list)
-    elif index_create:    do_action("create_index",         user_login, id_list)
-    elif index_recreate:  do_action("recreate_index",       user_login, id_list)
-    elif index_langs:     do_action("add_languages",        user_login, id_list)
-    elif index_forks:     do_action("add_fork_info",        user_login, id_list)
-    elif index_readmes:   do_action("add_readmes",          user_login, id_list)
-#    elif locate_by_lang:  do_action("locate_by_languages", user_login)
+    if languages:
+        languages = languages.split(',')
+
+    if   summarize:      do_action("print_summary",     user_login)
+    elif update:         do_action("update_internal",   user_login)
+    elif print_ids:      do_action("print_indexed_ids", user_login)
+    elif print_index:    do_action("print_index",       user_login, id_list, languages)
+    elif print_details:  do_action("print_details",     user_login, id_list)
+    elif index_create:   do_action("create_index",      user_login, id_list)
+    elif index_recreate: do_action("recreate_index",    user_login, id_list)
+    elif index_langs:    do_action("add_languages",     user_login, id_list)
+    elif index_forks:    do_action("add_fork_info",     user_login, id_list)
+    elif index_readmes:  do_action("add_readmes",       user_login, id_list)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
 
-def do_action(action, user_login=None, id_list=None):
+def do_action(action, user_login=None, id_list=None, languages=None):
     msg('Started at ', datetime.now())
     started = timer()
 
@@ -121,7 +123,10 @@ def do_action(action, user_login=None, id_list=None):
         indexer = GitHubIndexer(user_login)
         method = getattr(indexer, action, None)
         if id_list:
-            method(dbroot, id_list)
+            if languages:
+                method(dbroot, id_list, languages)
+            else:
+                method(dbroot, id_list)
         else:
             method(dbroot)
     finally:
@@ -147,12 +152,12 @@ main.__annotations__ = dict(
     print_details  = ('print details about entries',            'flag',   'd'),
     file           = ('limit to projects listed in file',       'option', 'f'),
     id             = ('limit to (single) given repository id',  'option', 'i'),
+    languages      = ('limit printing to specific languages',   'option', 'L'),
     index_forks    = ('gather repository copy/fork status',     'flag',   'k'),
     index_langs    = ('gather programming languages',           'flag',   'l'),
     print_index    = ('print summary of indexed repositories',  'flag',   'p'),
     print_ids      = ('print all known repository id numbers',  'flag',   'P'),
     index_readmes  = ('gather README files',                    'flag',   'r'),
-#    locate_by_lang = ('locate Java & Python projects',          'flag',   'L'),
     summarize      = ('summarize database statistics',          'flag',   's'),
     update         = ('update some internal database data',     'flag',   'u'),
 )

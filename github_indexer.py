@@ -498,20 +498,34 @@ class GitHubIndexer():
         transaction.commit()
 
 
-    def print_index(self, db, id_list=None):
+    def print_index(self, db, id_list=None, filter_by_langs=None):
         '''Print the database contents.'''
         last_seen = self.get_last_seen(db)
         if last_seen:
             msg('Last seen id: {}'.format(last_seen))
         else:
             msg('No record of last seen id.')
+        if filter_by_langs:
+            msg('Limiting output to entries having languages', filter_by_langs)
+            find_langs = [Language.identifier(x) for x in filter_by_langs]
+        else:
+            find_langs = None
         for key in id_list if id_list else db.keys():
+            if key not in db:
+                msg('Identifier {} is not in the database.'.format(key))
             entry = db[key]
             if not hasattr(entry, 'id'):
                 continue
             if entry.languages:
+                if find_langs:
+                    if not any(x for x in find_langs if x in entry.languages):
+                        continue
                 langs = ', '.join(Language.name(x) for x in entry.languages)
             else:
+                if find_langs:
+                    # We're asked to limit consideration to known languages.
+                    # This has none listed, so we skip it.
+                    continue
                 langs = 'Unknown'
             msg('GH #{} ({}/{}), langs: {}'.format(key, entry.owner, entry.name, langs))
 
