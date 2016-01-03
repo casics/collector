@@ -79,14 +79,25 @@ from github_indexer import GitHubIndexer
 # should hopefully be possible.
 
 def main(user_login=None, index_create=False, index_recreate=False,
-         index_langs=False, locate_by_lang=False, print_index=False,
-         print_ids=False, index_readmes=False, index_forks=False,
-         summarize=False, update=False, id_list=None):
+         print_details=False, file=None, id=None,
+         index_forks=False, index_langs=False, print_index=False,
+         print_ids=False, index_readmes=False,
+         summarize=False, update=False, locate_by_lang=False):
     '''Generate or print index of projects found in repositories.'''
+
+    if id:
+        id_list = [int(id)]
+    elif file:
+        with open(file) as f:
+            id_list = [int(x) for x in f.read().splitlines()]
+    else:
+        id_list = None
+
     if   summarize:       do_action("print_summary",        user_login)
     elif update:          do_action("update_internal",      user_login)
-    elif print_index:     do_action("print_index",          user_login)
     elif print_ids:       do_action("print_indexed_ids",    user_login)
+    elif print_index:     do_action("print_index",          user_login, id_list)
+    elif print_details:   do_action("print_details",        user_login, id_list)
     elif index_create:    do_action("create_index",         user_login, id_list)
     elif index_recreate:  do_action("recreate_index",       user_login, id_list)
     elif index_langs:     do_action("add_languages",        user_login, id_list)
@@ -110,9 +121,7 @@ def do_action(action, user_login=None, id_list=None):
         indexer = GitHubIndexer(user_login)
         method = getattr(indexer, action, None)
         if id_list:
-            with open(id_list) as f:
-                repositories = [int(x) for x in f.read().splitlines()]
-            method(dbroot, repositories)
+            method(dbroot, id_list)
         else:
             method(dbroot)
     finally:
@@ -133,17 +142,19 @@ def do_action(action, user_login=None, id_list=None):
 
 main.__annotations__ = dict(
     user_login     = ('use specified account login',            'option', 'a'),
-    index_create   = ('create basic index',                     'flag',   'c'),
-    index_recreate = ('recreate basic index',                   'flag',   'C'),
-    id_list        = ('limit to projects listed in file',       'option', 'f'),
-    index_langs    = ('gather programming languages',           'flag',   'l'),
+    index_create   = ('gather basic index data',                'flag',   'c'),
+    index_recreate = ('re-gather basic index data',             'flag',   'C'),
+    print_details  = ('print details about entries',            'flag',   'd'),
+    file           = ('limit to projects listed in file',       'option', 'f'),
+    id             = ('limit to (single) given repository id',  'option', 'i'),
     index_forks    = ('gather repository copy/fork status',     'flag',   'k'),
-    print_index    = ('print index',                            'flag',   'p'),
-    print_ids      = ('print known repository id numbers',      'flag',   'P'),
+    index_langs    = ('gather programming languages',           'flag',   'l'),
+    print_index    = ('print summary of indexed repositories',  'flag',   'p'),
+    print_ids      = ('print all known repository id numbers',  'flag',   'P'),
     index_readmes  = ('gather README files',                    'flag',   'r'),
 #    locate_by_lang = ('locate Java & Python projects',          'flag',   'L'),
-    summarize      = ('summarize database',                     'flag',   's'),
-    update         = ('update internal database data',          'flag',   'u'),
+    summarize      = ('summarize database statistics',          'flag',   's'),
+    update         = ('update some internal database data',     'flag',   'u'),
 )
 
 # Entry point
