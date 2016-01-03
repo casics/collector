@@ -306,124 +306,6 @@ class GitHubIndexer():
             return count
 
 
-    def summarize_language_stats(self, db):
-        msg('Gathering programming language statistics ...')
-        entries_with_languages = self.get_language_list(db)
-        entries = 0                     # Total number of entries seen.
-        language_counts = {}            # Pairs of language:count.
-        for name in entries_with_languages:
-            entries += 1
-            if (entries + 1) % 100000 == 0:
-                print(entries + 1, '...', end='', flush=True)
-            if name in db:
-                entry = db[name]
-            else:
-                msg('Cannot find entry "{}" in database'.format(name))
-                continue
-            if entry.languages != None:
-                for lang in entry.languages:
-                    if lang in language_counts:
-                        language_counts[lang] = language_counts[lang] + 1
-                    else:
-                        language_counts[lang] = 1
-        msg('Language usage counts:')
-        for key, value in sorted(language_counts.items(), key=operator.itemgetter(1),
-                                 reverse=True):
-            msg('  {0:<24s}: {1}'.format(Language.name(key), value))
-
-
-    def update_internal(self, db):
-        last_seen = 0
-        num_entries = 0
-        entries_with_languages = self.get_language_list(db)
-        entries_with_readmes = self.get_readme_list(db)
-        msg('Scanning every entry in the database ...')
-        for key, entry in db.items():
-            if not hasattr(entry, 'id'):
-                continue
-            num_entries += 1
-            if entry.id > last_seen:
-                last_seen = entry.id
-            if entry.languages != None:
-                entries_with_languages.add(key)
-            if entry.readme and entry.readme != '' and entry.readme != -1:
-                entries_with_readmes.add(key)
-            if (num_entries + 1) % 100000 == 0:
-                print(num_entries + 1, '...', end='', flush=True)
-        msg('Done.')
-        self.set_total_entries(num_entries, db)
-        msg('Database has {} total GitHub entries.'.format(num_entries))
-        self.set_last_seen(last_seen, db)
-        self.set_highest_github_id(last_seen, db)
-        msg('Last seen GitHub repository id: {}'.format(last_seen))
-        self.set_language_list(entries_with_languages, db)
-        msg('Number of entries with language info: {}'.format(entries_with_languages.__len__()))
-        self.set_readme_list(entries_with_readmes, db)
-        msg('Number of entries with README files: {}'.format(entries_with_readmes.__len__()))
-        transaction.commit()
-
-
-    def print_index(self, db):
-        '''Print the database contents.'''
-        last_seen = self.get_last_seen(db)
-        if last_seen:
-            msg('Last seen id: {}'.format(last_seen))
-        else:
-            msg('No record of last seen id.')
-        for key, entry in db.items():
-            if not hasattr(entry, 'id'):
-                continue
-            print(entry)
-            if entry.description:
-                msg(' ', entry.description.encode('ascii', 'ignore').decode('ascii'))
-            else:
-                msg('  -- no description --')
-
-
-    def print_indexed_ids(self, db):
-        '''Print the known repository identifiers in the database.'''
-        total_recorded = self.get_total_entries(db)
-        msg('total count: ', total_recorded)
-        count = 0
-        for key in db.keys():
-            if key == 0: continue
-            msg(key)
-            count += 1
-        if count != total_recorded:
-            msg('Error: {} expected in database, but counted {}'.format(
-                total_recorded, count))
-
-
-    def print_summary(self, db):
-        '''Print a summary of the database, without listing every entry.'''
-        total = self.get_total_entries(db)
-        if total:
-            msg('Database has {} total GitHub entries.'.format(total))
-            last_seen = self.get_last_seen(db)
-            if last_seen:
-                msg('Last seen GitHub id: {}.'.format(last_seen))
-            else:
-                msg('No "last_seen" marker found.')
-            entries_with_readmes = self.get_readme_list(db)
-            if entries_with_readmes != None:
-                msg('Database has {} entries with README files.'.format(entries_with_readmes.__len__()))
-            else:
-                msg('No entries recorded with README files.')
-            entries_with_languages = self.get_language_list(db)
-            if entries_with_languages != None:
-                num = entries_with_languages.__len__()
-                msg('Database has {} entries with language info.'.format(num))
-                if num != 0:
-                    self.summarize_language_stats(db)
-            else:
-                msg('No entries recorded with language info.')
-        else:
-            msg('Database has not been updated to include counts. Doing it now...')
-            self.update_internal(db)
-            total = self.get_total_entries(db)
-            msg('Database has {} total GitHub entries'.format(total))
-
-
     def direct_api_call(self, url):
         auth = '{0}:{1}'.format(self._login, self._password)
         headers = {
@@ -441,8 +323,12 @@ class GitHubIndexer():
             return None
 
 
+    def github_url(self, entry):
+        return 'http://github.com/' + entry.owner + '/' + entry.name
+
+
     def get_home_page(self, entry):
-        r = requests.get('http://github.com/' + entry.owner + '/' + entry.name)
+        r = requests.get(self.github_url(entry))
         return r.text if r.status_code == 200 else None
 
 
@@ -555,11 +441,165 @@ class GitHubIndexer():
             raise RuntimeError('{}: {}'.format(request.status_code, msg))
 
 
-    def recreate_index(self, db, project_list=None):
-        self.create_index(db, project_list, continuation=False)
+    def summarize_language_stats(self, db):
+        msg('Gathering programming language statistics ...')
+        entries_with_languages = self.get_language_list(db)
+        entries = 0                     # Total number of entries seen.
+        language_counts = {}            # Pairs of language:count.
+        for name in entries_with_languages:
+            entries += 1
+            if (entries + 1) % 100000 == 0:
+                print(entries + 1, '...', end='', flush=True)
+            if name in db:
+                entry = db[name]
+            else:
+                msg('Cannot find entry "{}" in database'.format(name))
+                continue
+            if entry.languages != None:
+                for lang in entry.languages:
+                    if lang in language_counts:
+                        language_counts[lang] = language_counts[lang] + 1
+                    else:
+                        language_counts[lang] = 1
+        msg('Language usage counts:')
+        for key, value in sorted(language_counts.items(), key=operator.itemgetter(1),
+                                 reverse=True):
+            msg('  {0:<24s}: {1}'.format(Language.name(key), value))
 
 
-    def create_index(self, db, project_list=None, continuation=True):
+    def update_internal(self, db):
+        last_seen = 0
+        num_entries = 0
+        entries_with_languages = self.get_language_list(db)
+        entries_with_readmes = self.get_readme_list(db)
+        msg('Scanning every entry in the database ...')
+        for key, entry in db.items():
+            if not hasattr(entry, 'id'):
+                continue
+            num_entries += 1
+            if entry.id > last_seen:
+                last_seen = entry.id
+            if entry.languages != None:
+                entries_with_languages.add(key)
+            if entry.readme and entry.readme != '' and entry.readme != -1:
+                entries_with_readmes.add(key)
+            if (num_entries + 1) % 100000 == 0:
+                print(num_entries + 1, '...', end='', flush=True)
+        msg('Done.')
+        self.set_total_entries(num_entries, db)
+        msg('Database has {} total GitHub entries.'.format(num_entries))
+        self.set_last_seen(last_seen, db)
+        self.set_highest_github_id(last_seen, db)
+        msg('Last seen GitHub repository id: {}'.format(last_seen))
+        self.set_language_list(entries_with_languages, db)
+        msg('Number of entries with language info: {}'.format(entries_with_languages.__len__()))
+        self.set_readme_list(entries_with_readmes, db)
+        msg('Number of entries with README files: {}'.format(entries_with_readmes.__len__()))
+        transaction.commit()
+
+
+    def print_index(self, db, id_list=None):
+        '''Print the database contents.'''
+        last_seen = self.get_last_seen(db)
+        if last_seen:
+            msg('Last seen id: {}'.format(last_seen))
+        else:
+            msg('No record of last seen id.')
+        for key in id_list if id_list else db.keys():
+            entry = db[key]
+            if not hasattr(entry, 'id'):
+                continue
+            print(entry)
+            if entry.description:
+                msg(' ', entry.description.encode('ascii', 'ignore').decode('ascii'))
+            else:
+                msg('  -- no description --')
+
+
+    def print_indexed_ids(self, db):
+        '''Print the known repository identifiers in the database.'''
+        total_recorded = self.get_total_entries(db)
+        msg('total count: ', total_recorded)
+        count = 0
+        for key in db.keys():
+            if key == 0: continue
+            msg(key)
+            count += 1
+        if count != total_recorded:
+            msg('Error: {} expected in database, but counted {}'.format(
+                total_recorded, count))
+
+
+    def print_summary(self, db):
+        '''Print a summary of the database, without listing every entry.'''
+        total = self.get_total_entries(db)
+        if total:
+            msg('Database has {} total GitHub entries.'.format(total))
+            last_seen = self.get_last_seen(db)
+            if last_seen:
+                msg('Last seen GitHub id: {}.'.format(last_seen))
+            else:
+                msg('No "last_seen" marker found.')
+            entries_with_readmes = self.get_readme_list(db)
+            if entries_with_readmes != None:
+                msg('Database has {} entries with README files.'.format(entries_with_readmes.__len__()))
+            else:
+                msg('No entries recorded with README files.')
+            entries_with_languages = self.get_language_list(db)
+            if entries_with_languages != None:
+                num = entries_with_languages.__len__()
+                msg('Database has {} entries with language info.'.format(num))
+                if num != 0:
+                    self.summarize_language_stats(db)
+            else:
+                msg('No entries recorded with language info.')
+        else:
+            msg('Database has not been updated to include counts. Doing it now...')
+            self.update_internal(db)
+            total = self.get_total_entries(db)
+            msg('Database has {} total GitHub entries'.format(total))
+
+
+    def print_details(self, db, id_list):
+        width = len('DESCRIPTION:')
+        for id in id_list:
+            msg('='*70)
+            if id not in db:
+                msg('Identifier {} is not in the database.'.format(id))
+                continue
+            entry = db[id]
+            msg('ID:'.ljust(width), id)
+            msg('URL:'.ljust(width), self.github_url(entry))
+            msg('NAME:'.ljust(width), entry.name)
+            msg('OWNER:'.ljust(width), entry.owner)
+            msg('OWNER TYPE:'.ljust(width),
+                'User' if entry.owner_type == RepoData.USER_OWNER else 'Organization')
+            msg('DESCRIPTION:'.ljust(width), entry.description)
+            msg('LANGUAGES:'.ljust(width),
+                ', '.join(Language.name(x) for x in entry.languages))
+            if entry.copy_of:
+                if entry.copy_of == True:
+                    fork_status = 'Yes'
+                else:
+                    fork_status = 'Yes, forked from ' + entry.copy_of
+            else:
+                fork_status = 'No'
+            msg('FORK:'.ljust(width), fork_status)
+            if entry.created:
+                msg('CREATED:'.ljust(width), timestamp_str(entry.created))
+            msg('DELETED:'.ljust(width), 'Yes' if entry.deleted else 'No')
+            msg('REFRESHED:'.ljust(width), timestamp_str(entry.refreshed))
+            if entry.readme and entry.readme != -1:
+                msg('README:')
+                msg(zlib.decompress(entry.readme))
+        msg('='*70)
+
+
+    def recreate_index(self, db, id_list=None):
+        self.create_index(db, id_list, continuation=False)
+
+
+    def create_index(self, db, id_list=None, continuation=True):
         count = self.get_total_entries(db)
         msg('There are {} entries currently in the database'.format(count))
 
@@ -585,8 +625,8 @@ class GitHubIndexer():
         # rate-limited period will go down by 1.  When we hit the limit, we pause
         # until the reset time.
 
-        if project_list:
-            repo_iterator = iter(project_list)
+        if id_list:
+            repo_iterator = iter(id_list)
         else:
             repo_iterator = self.get_repo_iterator(last_seen)
         loop_count    = 0
@@ -667,7 +707,7 @@ class GitHubIndexer():
             msg('Done.')
 
 
-    def add_languages(self, db, project_list=None):
+    def add_languages(self, db, id_list=None):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
         entries_with_languages = self.get_language_list(db)
         failures = 0
@@ -678,8 +718,7 @@ class GitHubIndexer():
         # number of elements may be changing.  Making this list is incredibly
         # inefficient and takes many minutes to create.
 
-        id_list = project_list if project_list else list(db.keys())
-        for count, key in enumerate(id_list):
+        for count, key in enumerate(id_list if id_list else list(db.keys())):
             if key not in db:
                 msg('repository id {} is unknown'.format(key))
                 continue
@@ -761,7 +800,7 @@ class GitHubIndexer():
         msg('Done.')
 
 
-    def add_readmes(self, db, project_list=None):
+    def add_readmes(self, db, id_list=None):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
         entries_with_readmes = self.get_readme_list(db)
         failures = 0
@@ -772,8 +811,7 @@ class GitHubIndexer():
         # number of elements may be changing.  Making this list is incredibly
         # inefficient and takes many minutes to create.
 
-        id_list = project_list if project_list else list(db.keys())
-        for count, key in enumerate(id_list):
+        for count, key in enumerate(id_list if id_list else list(db.keys())):
             if key not in db:
                 msg('repository id {} is unknown'.format(key))
                 continue
@@ -846,7 +884,7 @@ class GitHubIndexer():
         msg('Done.')
 
 
-    def add_fork_info(self, db, project_list=None):
+    def add_fork_info(self, db, id_list=None):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
         failures = 0
         start = time()
@@ -856,8 +894,7 @@ class GitHubIndexer():
         # number of elements may be changing.  Making this list is incredibly
         # inefficient and takes many minutes to create.
 
-        id_list = project_list if project_list else list(db.keys())
-        for count, key in enumerate(id_list):
+        for count, key in enumerate(id_list if id_list else list(db.keys())):
             if key not in db:
                 msg('repository id {} is unknown'.format(key))
                 continue
