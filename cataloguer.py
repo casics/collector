@@ -122,11 +122,12 @@ def do_action(action, user_login=None, id_list=None, languages=None):
     try:
         indexer = GitHubIndexer(user_login)
         method = getattr(indexer, action, None)
-        if id_list:
-            if languages:
-                method(dbroot, id_list, languages)
-            else:
-                method(dbroot, id_list)
+        if id_list and languages:
+            method(dbroot, id_list, languages)
+        elif id_list:
+            method(dbroot, id_list)
+        elif languages:
+            method(dbroot, None, languages)
         else:
             method(dbroot)
     finally:
