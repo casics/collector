@@ -403,6 +403,7 @@ class GitHubIndexer():
                 return ('http', r.text)
             elif r.status_code < 300:
                 pdb.set_trace()
+            sleep(0.1) # Don't hit their servers too hard.
 
         # Resort to GitHub API call.
         # Get the "preferred" readme file for a repository, as described in
