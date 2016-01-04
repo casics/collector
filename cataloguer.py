@@ -82,7 +82,7 @@ def main(user_login=None, index_create=False, index_recreate=False,
          print_details=False, file=None, id=None, languages=None,
          index_forks=False, index_langs=False, print_index=False,
          print_ids=False, index_readmes=False,
-         summarize=False, update=False, locate_by_lang=False):
+         summarize=False, update=False):
     '''Generate or print index of projects found in repositories.'''
 
     if id:
