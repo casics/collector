@@ -599,8 +599,7 @@ class GitHubIndexer():
             else:
                 fork_status = 'No'
             msg('FORK:'.ljust(width), fork_status)
-            if entry.created:
-                msg('CREATED:'.ljust(width), timestamp_str(entry.created))
+            msg('CREATED:'.ljust(width), timestamp_str(entry.created))
             msg('DELETED:'.ljust(width), 'Yes' if entry.deleted else 'No')
             msg('REFRESHED:'.ljust(width), timestamp_str(entry.refreshed))
             if entry.readme and entry.readme != -1:
