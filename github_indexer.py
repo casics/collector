@@ -318,7 +318,12 @@ class GitHubIndexer():
         response = conn.getresponse()
         if response.status == 200:
             content = response.readall()
-            return content.decode('utf-8')
+            try:
+                return content.decode('utf-8')
+            except:
+                # Content is either binary or garbled.  We can't deal with it,
+                # so we return an empty string.
+                return ''
         else:
             return None
 
