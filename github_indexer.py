@@ -122,7 +122,9 @@ class GitHubIndexer():
             return rate_limit['resources']['core']['remaining']
         except Exception as err:
             msg('Got exception asking about rate limit: {}'.format(err))
-            raise err
+            # Treat it as no time left, which in the rest of the code should
+            # cause a pause and a retry later.
+            return 0
 
 
     def api_reset_time(self):
