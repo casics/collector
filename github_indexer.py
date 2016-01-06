@@ -597,16 +597,18 @@ class GitHubIndexer():
             msg('OWNER TYPE:'.ljust(width),
                 'User' if entry.owner_type == RepoData.USER_OWNER else 'Organization')
             msg('DESCRIPTION:'.ljust(width), entry.description)
-            msg('LANGUAGES:'.ljust(width),
-                ', '.join(Language.name(x) for x in entry.languages))
-            if entry.copy_of:
-                if entry.copy_of == True:
-                    fork_status = 'Yes'
-                else:
-                    fork_status = 'Yes, forked from ' + entry.copy_of
+            if entry.languages:
+                msg('LANGUAGES:'.ljust(width),
+                    ', '.join(Language.name(x) for x in entry.languages))
+            else:
+                msg('LANGUAGES:')
+            msg('CREATED:'.ljust(width), timestamp_str(entry.created))
+            if entry.copy_of and entry.copy_of != True:
+                fork_status = 'Yes, forked from ' + entry.copy_of
+            elif entry.copy_of:
+                fork_status = 'Yes'
             else:
                 fork_status = 'No'
-            msg('CREATED:'.ljust(width), timestamp_str(entry.created))
             msg('IS FORK:'.ljust(width), fork_status)
             msg('IS DELETED:'.ljust(width), 'Yes' if entry.deleted else 'No')
             msg('REFRESHED:'.ljust(width), timestamp_str(entry.refreshed))
