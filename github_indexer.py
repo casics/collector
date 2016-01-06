@@ -190,6 +190,9 @@ class GitHubIndexer():
                                    copy_of=repo.fork,  # Only a Boolean.
                                    owner_type=repo.owner.type,
                                    refreshed=now_timestamp())
+        # Update other info.
+        mapping = self.get_name_mapping(db)
+        mapping[repo.id] = repo.owner + '/' + repo.name
 
 
     def get_globals(self, db):
