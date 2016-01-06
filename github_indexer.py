@@ -811,13 +811,11 @@ class GitHubIndexer():
             if failures >= self._max_failures:
                 msg('Stopping because of too many consecutive failures')
                 break
-            self.set_language_list(entries_with_languages, db)
             transaction.commit()
             if count % 100 == 0:
                 msg('{} [{:2f}]'.format(count, time() - start))
                 start = time()
 
-        self.set_language_list(entries_with_languages, db)
         transaction.commit()
         msg('')
         msg('Done.')
@@ -895,13 +893,11 @@ class GitHubIndexer():
             if failures >= self._max_failures:
                 msg('Stopping because of too many consecutive failures')
                 break
-            self.set_readme_list(entries_with_readmes, db)
             transaction.commit()
             if count % 100 == 0:
                 msg('{} [{:2f}]'.format(count, time() - start))
                 start = time()
 
-        self.set_readme_list(entries_with_readmes, db)
         transaction.commit()
         msg('')
         msg('Done.')
