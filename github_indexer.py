@@ -848,7 +848,7 @@ class GitHubIndexer():
 
     def add_readmes(self, db, id_list=None):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
-        entries_with_readmes = self.get_readme_list(db)
+#        entries_with_readmes = self.get_readme_list(db)
         failures = 0
         start = time()
 
@@ -864,15 +864,15 @@ class GitHubIndexer():
             entry = db[key]
             if not hasattr(entry, 'id'):
                 continue
-            if key in entries_with_readmes:
-                continue
+            # if key in entries_with_readmes:
+            #     continue
             if entry.readme == -1:
                 # We already tried to get this one, and it was empty.
                 continue
             if entry.readme:
                 # It has a non-empty readme field but it wasn't in our
                 # list of entries with readme's.  Add it and move along.
-                entries_with_readmes.add(key)
+#                entries_with_readmes.add(key)
                 continue
 
             retry = True
@@ -890,7 +890,7 @@ class GitHubIndexer():
                         entry.readme = zlib.compress(bytes(readme, 'utf-8'))
                         entry.refreshed = now_timestamp()
                         entry._p_changed = True # Needed for ZODB record updates.
-                        entries_with_readmes.add(key)
+#                        entries_with_readmes.add(key)
                     else:
                         # If GitHub doesn't return a README file, we need to
                         # record something to indicate that we already tried.
