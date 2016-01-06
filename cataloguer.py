@@ -79,19 +79,20 @@ from github_indexer import GitHubIndexer
 # should hopefully be possible.
 
 def main(user_login=None, index_create=False, index_recreate=False,
-         print_details=False, file=None, id=None, languages=None,
+         print_details=False, file=None, id=None, name=None, languages=None,
          index_forks=False, index_langs=False, print_index=False,
-         print_ids=False, index_readmes=False,
-         summarize=False, update=False):
+         print_ids=False, index_readmes=False, summarize=False, update=False):
     '''Generate or print index of projects found in repositories.'''
 
     if id:
-        id_list = [int(id)]
+        targets = [int(id)]
     elif file:
         with open(file) as f:
-            id_list = [int(x) for x in f.read().splitlines()]
+            targets = [int(x) for x in f.read().splitlines()]
+    elif name:
+        targets = [name]
     else:
-        id_list = None
+        targets = None
 
     if languages:
         languages = languages.split(',')
@@ -99,18 +100,18 @@ def main(user_login=None, index_create=False, index_recreate=False,
     if   summarize:      do_action("print_summary",     user_login)
     elif update:         do_action("update_internal",   user_login)
     elif print_ids:      do_action("print_indexed_ids", user_login)
-    elif print_index:    do_action("print_index",       user_login, id_list, languages)
-    elif print_details:  do_action("print_details",     user_login, id_list)
-    elif index_create:   do_action("create_index",      user_login, id_list)
-    elif index_recreate: do_action("recreate_index",    user_login, id_list)
-    elif index_langs:    do_action("add_languages",     user_login, id_list)
-    elif index_forks:    do_action("add_fork_info",     user_login, id_list)
-    elif index_readmes:  do_action("add_readmes",       user_login, id_list)
+    elif print_index:    do_action("print_index",       user_login, targets, languages)
+    elif print_details:  do_action("print_details",     user_login, targets)
+    elif index_create:   do_action("create_index",      user_login, targets)
+    elif index_recreate: do_action("recreate_index",    user_login, targets)
+    elif index_langs:    do_action("add_languages",     user_login, targets)
+    elif index_forks:    do_action("add_fork_info",     user_login, targets)
+    elif index_readmes:  do_action("add_readmes",       user_login, targets)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
 
-def do_action(action, user_login=None, id_list=None, languages=None):
+def do_action(action, user_login=None, targets=None, languages=None):
     msg('Started at ', datetime.now())
     started = timer()
 
@@ -122,10 +123,10 @@ def do_action(action, user_login=None, id_list=None, languages=None):
     try:
         indexer = GitHubIndexer(user_login)
         method = getattr(indexer, action, None)
-        if id_list and languages:
-            method(dbroot, id_list, languages)
-        elif id_list:
-            method(dbroot, id_list)
+        if targets and languages:
+            method(dbroot, targets, languages)
+        elif targets:
+            method(dbroot, targets)
         elif languages:
             method(dbroot, None, languages)
         else:
@@ -147,20 +148,21 @@ def do_action(action, user_login=None, id_list=None, languages=None):
 # Plac automatically adds a -h argument for help, so no need to do it here.
 
 main.__annotations__ = dict(
-    user_login     = ('use specified account login',            'option', 'a'),
-    index_create   = ('gather basic index data',                'flag',   'c'),
-    index_recreate = ('re-gather basic index data',             'flag',   'C'),
-    print_details  = ('print details about entries',            'flag',   'd'),
-    file           = ('limit to projects listed in file',       'option', 'f'),
-    id             = ('limit to (single) given repository id',  'option', 'i'),
-    languages      = ('limit printing to specific languages',   'option', 'L'),
-    index_forks    = ('gather repository copy/fork status',     'flag',   'k'),
-    index_langs    = ('gather programming languages',           'flag',   'l'),
-    print_index    = ('print summary of indexed repositories',  'flag',   'p'),
-    print_ids      = ('print all known repository id numbers',  'flag',   'P'),
-    index_readmes  = ('gather README files',                    'flag',   'r'),
-    summarize      = ('summarize database statistics',          'flag',   's'),
-    update         = ('update some internal database data',     'flag',   'u'),
+    user_login     = ('use specified account login',              'option', 'a'),
+    index_create   = ('gather basic index data',                  'flag',   'c'),
+    index_recreate = ('re-gather basic index data',               'flag',   'C'),
+    print_details  = ('print details about entries',              'flag',   'd'),
+    file           = ('limit to projects listed in file',         'option', 'f'),
+    id             = ('limit to single supplied repository id',   'option', 'i'),
+    name           = ('limit to single supplied repository name', 'option', 'n'),
+    languages      = ('limit printing to specific languages',     'option', 'L'),
+    index_forks    = ('gather repository copy/fork status',       'flag',   'k'),
+    index_langs    = ('gather programming languages',             'flag',   'l'),
+    print_index    = ('print summary of indexed repositories',    'flag',   'p'),
+    print_ids      = ('print all known repository id numbers',    'flag',   'P'),
+    index_readmes  = ('gather README files',                      'flag',   'r'),
+    summarize      = ('summarize database statistics',            'flag',   's'),
+    update         = ('update some internal database data',       'flag',   'u'),
 )
 
 # Entry point

@@ -27,6 +27,7 @@ import transaction
 from base64 import b64encode
 from BTrees.IOBTree import TreeSet
 from BTrees.OOBTree import Bucket
+from BTrees.OIBTree import OIBTree
 from datetime import datetime
 from time import time, sleep
 
@@ -191,38 +192,6 @@ class GitHubIndexer():
                                    refreshed=now_timestamp())
 
 
-    # def add_record_from_github3(self, repo, db, languages=None):
-    #     # Match impedances between github3's record format and ours.
-    #     #
-    #     # Our database keys are the integer identifiers assigned to repos.
-    #     identifier = repo if isinstance(repo, int) else repo.id
-    #     if identifier in db:
-    #         # If overwriting an existing entry, save content that needs
-    #         # separate calls but otherwise take the info from the 
-    #         old_entry = db[identifier]
-    #         db[identifier] = RepoEntry(host=Host.GITHUB,
-    #                                    id=identifier,
-    #                                    path=repo.full_name,
-    #                                    description=repo.description,
-    #                                    readme=old_entry.readme,
-    #                                    copy_of=repo.fork,   # Only a Boolean.
-    #                                    deleted=old_entry.deleted,
-    #                                    owner=repo.owner.login,
-    #                                    owner_type=repo.owner.type,
-    #                                    languages=old_entry.languages,
-    #                                    topics=old_entry.topics,
-    #                                    categories=old_entry.categories)
-    #     else:
-    #         db[identifier] = RepoEntry(host=Host.GITHUB,
-    #                                    id=identifier,
-    #                                    path=repo.full_name,
-    #                                    description=repo.description,
-    #                                    copy_of=repo.fork,   # Only a Boolean.
-    #                                    owner=repo.owner.login,
-    #                                    owner_type=repo.owner.type,
-    #                                    languages=languages)
-
-
     def get_globals(self, db):
         # We keep globals at position 0 in the database, since repo identifiers
         # in GitHub start at 1.
@@ -270,13 +239,14 @@ class GitHubIndexer():
 
 
     def get_language_list(self, db):
-        lang_list = self.from_globals(db, 'entries with languages')
+        key = 'entries with languages'
+        lang_list = self.from_globals(db, key)
         if lang_list != None:           # Need explicit test against None.
             return lang_list
         else:
             msg('Did not find list of entries with languages. Creating it.')
-            self.set_in_globals('entries with languages', TreeSet(), db)
-            return self.from_globals(db, 'entries with languages')
+            self.set_in_globals(key, TreeSet(), db)
+            return self.from_globals(db, key)
 
 
     def set_readme_list(self, value, db):
@@ -284,13 +254,14 @@ class GitHubIndexer():
 
 
     def get_readme_list(self, db):
-        readme_list = self.from_globals(db, 'entries with readmes')
+        key = 'entries with readmes'
+        readme_list = self.from_globals(db, key)
         if readme_list != None:           # Need explicit test against None.
             return readme_list
         else:
             msg('Did not find list of entries with readmes. Creating it.')
-            self.set_in_globals('entries with readmes', TreeSet(), db)
-            return self.from_globals(db, 'entries with readmes')
+            self.set_in_globals(key, TreeSet(), db)
+            return self.from_globals(db, key)
 
 
     def set_total_entries(self, count, db):
@@ -298,14 +269,30 @@ class GitHubIndexer():
 
 
     def get_total_entries(self, db):
+        key = 'total entries'
         globals = self.get_globals(db)
-        if 'total entries' in globals:
-            return globals['total entries']
+        if key in globals:
+            return globals[key]
         else:
             msg('Did not find a count of entries.  Counting now...')
             count = len(list(db.keys()))
             self.set_total_entries(count, db)
             return count
+
+
+    def set_name_mapping(self, value, db):
+        self.set_in_globals('name to identifier mapping', value, db)
+
+
+    def get_name_mapping(self, db):
+        key = 'name to identifier mapping'
+        mapping = self.from_globals(db, key)
+        if mapping != None:           # Need explicit test against None.
+            return mapping
+        else:
+            msg('Did not find name to identifier mapping.  Creating it.')
+            self.set_in_globals(key, OIBTree(), db)
+            return self.from_globals(db, key)
 
 
     def direct_api_call(self, url):
@@ -506,6 +493,26 @@ class GitHubIndexer():
         transaction.commit()
 
 
+    def update_name_mapping(self, db):
+        mapping = self.get_name_mapping(db)
+        count = 0
+        msg('Updating name mapping ...')
+        start = time()
+        for key in db.keys():
+            if key == 0: continue
+            entry = db[key]
+            if not hasattr(entry, 'owner'):
+                continue
+            mapping[entry.owner + '/' + entry.name] = key
+            count += 1
+            if count % 10000 == 0:
+                transaction.commit()
+                msg('{} [{:2f}]'.format(count, time() - start))
+                start = time()
+        transaction.commit()
+        msg('Done.')
+
+
     def print_index(self, db, id_list=None, filter_by_langs=None):
         '''Print the database contents.'''
         last_seen = self.get_last_seen(db)
@@ -582,12 +589,17 @@ class GitHubIndexer():
             msg('Database has {} total GitHub entries'.format(total))
 
 
-    def print_details(self, db, id_list):
+    def print_details(self, db, targets):
         width = len('DESCRIPTION:')
-        for id in id_list:
+        mapping = self.get_name_mapping(db)
+        for item in targets:
             msg('='*70)
-            if id not in db:
-                msg('Identifier {} is not in the database.'.format(id))
+            if item.isdigit() and item in db:
+                id = item
+            elif item in mapping:
+                id = mapping[item]
+            else:
+                msg('{} is not in the database.'.format(item))
                 continue
             entry = db[id]
             msg('ID:'.ljust(width), id)
@@ -616,6 +628,16 @@ class GitHubIndexer():
                 msg('README:')
                 msg(zlib.decompress(entry.readme))
         msg('='*70)
+
+
+    def lookup_name(self, db, name):
+        maping = self.get_name_mapping(db)
+        if mapping == None:
+            msg('No name to identifier mapping table available')
+        if name in mapping:
+            msg('{} = {}'.format(name, mapping[name]))
+        else:
+            msg('Could not find {} in the mapping table.'.format(name))
 
 
     def recreate_index(self, db, id_list=None):
