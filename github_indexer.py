@@ -315,8 +315,10 @@ class GitHubIndexer():
             except:
                 # Content is either binary or garbled.  We can't deal with it,
                 # so we return an empty string.
+                msg('Undecodable content received for {}'.format(url))
                 return ''
         else:
+            msg('Response status {} for {}'.format(response.status, url))
             return None
 
 
@@ -389,18 +391,18 @@ class GitHubIndexer():
 
     def get_readme(self, entry):
         # First try to get it via direct HTTP access, to save on API calls.
-        base_url = 'https://raw.githubusercontent.com/' + entry.owner + '/' + entry.name
-        readme_1 = base_url + '/master/README.md'
-        readme_2 = base_url + '/master/README.rst'
-        readme_3 = base_url + '/master/README'
-        readme_4 = base_url + '/master/README.txt'
-        for alternative in [readme_1, readme_2, readme_3, readme_4]:
-            r = requests.get(alternative)
-            if r.status_code == 200:
-                return ('http', r.text)
-            elif r.status_code < 300:
-                pdb.set_trace()
-            sleep(0.1) # Don't hit their servers too hard.
+        # base_url = 'https://raw.githubusercontent.com/' + entry.owner + '/' + entry.name
+        # readme_1 = base_url + '/master/README.md'
+        # readme_2 = base_url + '/master/README.rst'
+        # readme_3 = base_url + '/master/README'
+        # readme_4 = base_url + '/master/README.txt'
+        # for alternative in [readme_1, readme_2, readme_3, readme_4]:
+        #     r = requests.get(alternative)
+        #     if r.status_code == 200:
+        #         return ('http', r.text)
+        #     elif r.status_code < 300:
+        #         pdb.set_trace()
+        #     sleep(0.1) # Don't hit their servers too hard.
 
         # Resort to GitHub API call.
         # Get the "preferred" readme file for a repository, as described in
@@ -875,6 +877,11 @@ class GitHubIndexer():
 #                entries_with_readmes.add(key)
                 continue
 
+            if self.api_calls_left() < 1:
+                self.wait_for_reset()
+                failures = 0
+                msg('Continuing')
+
             retry = True
             while retry and failures < self._max_failures:
                 # Don't retry unless the problem may be transient.
@@ -884,9 +891,12 @@ class GitHubIndexer():
                     (method, readme) = self.get_readme(entry)
                     t2 = time()
                     if readme:
-                        msg('{}/{} (#{}) in {:.2f}s via {}'.format(entry.owner, entry.name,
-                                                                   entry.id, t2-t1,
-                                                                   method))
+                        msg('{}/{} (#{}) {} in {:.2f}s via {}'.format(entry.owner,
+                                                                      entry.name,
+                                                                      entry.id,
+                                                                      len(readme),
+                                                                      t2-t1,
+                                                                      method))
                         entry.readme = zlib.compress(bytes(readme, 'utf-8'))
                         entry.refreshed = now_timestamp()
                         entry._p_changed = True # Needed for ZODB record updates.
@@ -922,6 +932,7 @@ class GitHubIndexer():
             if count % 100 == 0:
                 msg('{} [{:2f}]'.format(count, time() - start))
                 start = time()
+            sleep(0.15) # Be nicer to their servers.
 
         transaction.commit()
         msg('')
