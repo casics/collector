@@ -434,7 +434,7 @@ class GitHubIndexer():
                 pdb.set_trace()
             sleep(0.1) # Don't hit their servers too hard.
 
-        # Resort to GitHub API call.
+        # Resort to GitHub API calls because our guesses may have been wrong.
         # Get the "preferred" readme file for a repository, as described in
         # https://developer.github.com/v3/repos/contents/
         # Using github3.py would need 2 api calls per repo to get this info.
