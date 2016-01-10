@@ -916,7 +916,6 @@ class GitHubIndexer():
         # inefficient and takes many minutes to create.
 
         for count, key in enumerate(id_list if id_list else list(db.keys())):
-            pdb.set_trace()
             if isinstance(key, str):
                 if key.isdigit():
                     key = int(key)
