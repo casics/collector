@@ -962,14 +962,16 @@ class GitHubIndexer():
                             # Nope, it's gone.
                             entry.deleted = True
                             msg('{}/{} no longer exists'.format(entry.owner, entry.name))
-                        else:
-                            # It exists in GitHub, and the owner and/or name
-                            # may have changed.
+                        elif entry.owner != repo.owner.login or entry.name != repo.name:
+                            # The owner or name changed.
                             entry.owner = repo.owner.login
                             entry.name = repo.name
                             self.add_name_mapping(entry, db)
                             # Try again with the info returned by github3.
                             (method, readme) = self.get_readme(entry)
+                        else:
+                            # No readme available.  Drop to the -1 case below.
+                            pass
 
                     if readme and readme != 404:
                         t2 = time()
