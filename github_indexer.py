@@ -612,10 +612,16 @@ class GitHubIndexer():
         mapping = self.get_name_mapping(db)
         for item in targets:
             msg('='*70)
-            if item.isdigit() and item in db:
+            if isinstance(item, str):
+                if item.isdigit():
+                    id = int(item)
+                elif item in mapping:
+                    id = mapping[item]
+                else:
+                    msg('{} is not known.'.format(item))
+                    continue
+            elif item in db:
                 id = item
-            elif item in mapping:
-                id = mapping[item]
             else:
                 msg('{} is not in the database.'.format(item))
                 continue
