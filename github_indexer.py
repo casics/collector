@@ -815,7 +815,6 @@ class GitHubIndexer():
                 failures = 0
                 msg('Continuing')
 
-            pdb.set_trace()
             retry = True
             while retry and failures < self._max_failures:
                 # Don't retry unless the problem may be transient.
