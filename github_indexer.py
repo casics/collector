@@ -191,8 +191,12 @@ class GitHubIndexer():
                                    owner_type=repo.owner.type,
                                    refreshed=now_timestamp())
         # Update other info.
+        self.add_name_mapping(db[repo.id], db)
+
+
+    def add_name_mapping(self, entry, db):
         mapping = self.get_name_mapping(db)
-        mapping[repo.id] = repo.owner + '/' + repo.name
+        mapping[entry.id] = entry.owner + '/' + entry.name
 
 
     def get_globals(self, db):
@@ -317,6 +321,9 @@ class GitHubIndexer():
                 # so we return an empty string.
                 msg('Undecodable content received for {}'.format(url))
                 return ''
+        elif response.status == 404:
+            msg('Response status 404 for {}'.format(url))
+            return 404
         else:
             msg('Response status {} for {}'.format(response.status, url))
             return None
@@ -328,7 +335,7 @@ class GitHubIndexer():
 
     def get_home_page(self, entry):
         r = requests.get(self.github_url(entry))
-        return r.text if r.status_code == 200 else None
+        return (r.status_code, r.text)
 
 
     def extract_languages_from_html(self, html, entry):
@@ -370,39 +377,45 @@ class GitHubIndexer():
     def get_languages(self, entry):
         # First try to get it by scraping the HTTP web page for the project.
         # This saves an API call.
-        html = self.get_home_page(entry)
+        (code, html) = self.get_home_page(entry)
+        if code == 404:
+            return (False, 'http', [], None)
         if html:
             languages = self.extract_languages_from_html(html, entry)
-            # While we're here, pull out some other data too:
-            copy_info = self.extract_fork_from_html(html, entry)
-            return ('http', languages, copy_info)
+            if languages:
+                # Succeeded in getting language info by scraping.
+                # While we're here, pull out some other data too:
+                fork_info = self.extract_fork_from_html(html, entry)
+                return (True, 'http', languages, fork_info)
 
         # Failed to get it by scraping.  Try the GitHub API.
-        # Using github3.py would need 2 api calls per repo to get this info.
+        # Using github3.py would cause 2 API calls per repo to get this info.
         # Here we do direct access to bring it to 1 api call.
         url = 'https://api.github.com/repos/{}/{}/languages'.format(entry.owner,
                                                                     entry.name)
         response = self.direct_api_call(url)
-        if response == None:
-            return ('api', [], None)
+        if response == 404:
+            return (False, 'api', [], None)
+        elif response == None:
+            return (True, 'api', [], None)
         else:
-            return ('api', json.loads(response), None)
+            return (True, 'api', json.loads(response), None)
 
 
     def get_readme(self, entry):
         # First try to get it via direct HTTP access, to save on API calls.
-        # base_url = 'https://raw.githubusercontent.com/' + entry.owner + '/' + entry.name
-        # readme_1 = base_url + '/master/README.md'
-        # readme_2 = base_url + '/master/README.rst'
-        # readme_3 = base_url + '/master/README'
-        # readme_4 = base_url + '/master/README.txt'
-        # for alternative in [readme_1, readme_2, readme_3, readme_4]:
-        #     r = requests.get(alternative)
-        #     if r.status_code == 200:
-        #         return ('http', r.text)
-        #     elif r.status_code < 300:
-        #         pdb.set_trace()
-        #     sleep(0.1) # Don't hit their servers too hard.
+        base_url = 'https://raw.githubusercontent.com/' + entry.owner + '/' + entry.name
+        readme_1 = base_url + '/master/README.md'
+        readme_2 = base_url + '/master/README.rst'
+        readme_3 = base_url + '/master/README'
+        readme_4 = base_url + '/master/README.txt'
+        for alternative in [readme_1, readme_2, readme_3, readme_4]:
+            r = requests.get(alternative)
+            if r.status_code == 200:
+                return ('http', r.text)
+            elif r.status_code < 300:
+                pdb.set_trace()
+            sleep(0.1) # Don't hit their servers too hard.
 
         # Resort to GitHub API call.
         # Get the "preferred" readme file for a repository, as described in
@@ -415,7 +428,7 @@ class GitHubIndexer():
 
     def get_fork_info(self, entry):
         # As usual, try to get it by scraping the web page.
-        html = self.get_home_page(entry)
+        (code, html) = self.get_home_page(entry)
         if html:
             fork_info = self.extract_fork_from_html(html, entry)
             if fork_info != None:
@@ -760,6 +773,7 @@ class GitHubIndexer():
     def add_languages(self, db, id_list=None):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
         entries_with_languages = self.get_language_list(db)
+        name_mapping = self.get_name_mapping(db)
         failures = 0
         start = time()
 
@@ -769,17 +783,24 @@ class GitHubIndexer():
         # inefficient and takes many minutes to create.
 
         for count, key in enumerate(id_list if id_list else list(db.keys())):
+            if isinstance(key, str):
+                if key.isdigit():
+                    key = int(key)
+                elif key in name_mapping:
+                    key = name_mapping[key]
+                else:
+                    msg('Skipping unknown repo {}'.format(key))
+                    continue
             if key not in db:
-                msg('repository id {} is unknown'.format(key))
+                msg('Repository id {} is unknown'.format(key))
                 continue
+
             entry = db[key]
             if not hasattr(entry, 'id'):
                 continue
-            if key in entries_with_languages:
-                continue
-            if entry.languages != None:
-                # It has a non-empty language field but it wasn't in our list
-                # of entries with language info.  Add it and move along.
+            # if key in entries_with_languages:
+            #     continue
+            if entry.languages:
                 entries_with_languages.add(key)
                 continue
 
@@ -794,24 +815,46 @@ class GitHubIndexer():
                 retry = False
                 try:
                     t1 = time()
-                    (method, results, copy_info) = self.get_languages(entry)
-                    t2 = time()
-                    msg('{}/{} (#{}{}) in {:.2f}s via {}'.format(
-                        entry.owner, entry.name, entry.id,
-                        ', a fork of {}'.format(copy_info) if copy_info else '',
-                        t2-t1, method))
-                    raw_languages = [lang for lang in results]
-                    languages = [Language.identifier(x) for x in raw_languages]
-                    entry.languages = languages
+                    (found, method, langs, fork) = self.get_languages(entry)
+                    if not found:
+                        # Repo was renamed, deleted, or made private.  See if
+                        # our records need to be updated.
+                        repo = self.github().repository(entry.owner, entry.name)
+                        if not repo:
+                            # Nope, it's gone.
+                            entry.deleted = True
+                            msg('{}/{} no longer exists'.format(entry.owner, entry.name))
+                        elif repo.full_name in name_mapping:
+                            # It's been renamed.  Try again with the new name.
+                            entry.owner = repo.owner.login
+                            entry.name = repo.name
+                            self.add_name_mapping(entry, db)
+                            (found, method, langs, fork) = self.get_languages(entry)
+                        else:
+                            # Either it's not in our db, or it's missing from
+                            # the name mapping.
+                            self.add_record_from_github3(repo, db)
+                            entry = db[repo.id]
+                            (found, method, langs, fork) = self.get_languages(entry)
+
+                    if not entry.deleted:
+                        t2 = time()
+                        msg('{}/{} (#{}{}) in {:.2f}s via {}'.format(
+                            entry.owner, entry.name, entry.id,
+                            ', a fork of {}'.format(fork) if fork else '',
+                            t2-t1, method))
+                        raw_languages = [lang for lang in langs]
+                        languages = [Language.identifier(x) for x in raw_languages]
+                        entry.languages = languages
+                        entries_with_languages.add(key)
+                        if fork:
+                            # Don't change copy_of if we couldn't read it while
+                            # looking for languages, because we might have stored
+                            # it previously using a different data source.
+                            entry.copy_of = fork
+
                     entry.refreshed = now_timestamp()
-                    if copy_info:
-                        # Don't change copy_of if we couldn't read it while
-                        # looking for languages, because we might have stored
-                        # it previously using a different data source.
-                        entry.copy_of = copy_info
                     entry._p_changed = True # Needed for ZODB record updates.
-                    # Misc bookkeeping.
-                    entries_with_languages.add(key)
                     failures = 0
                 except github3.GitHubError as err:
                     if err.code == 403:
