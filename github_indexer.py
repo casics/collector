@@ -196,7 +196,7 @@ class GitHubIndexer():
 
     def add_name_mapping(self, entry, db):
         mapping = self.get_name_mapping(db)
-        mapping[entry.id] = entry.owner + '/' + entry.name
+        mapping[entry.owner + '/' + entry.name] = entry.id
 
 
     def get_globals(self, db):
@@ -815,6 +815,7 @@ class GitHubIndexer():
                 failures = 0
                 msg('Continuing')
 
+            pdb.set_trace()
             retry = True
             while retry and failures < self._max_failures:
                 # Don't retry unless the problem may be transient.
@@ -823,15 +824,16 @@ class GitHubIndexer():
                     t1 = time()
                     (found, method, langs, fork) = self.get_languages(entry)
                     if not found:
-                        # Repo was renamed, deleted, or made private.  See if
-                        # our records need to be updated.
+                        # Repo was renamed, deleted, made private, or there's
+                        # no home page.  See if our records need to be updated.
                         repo = self.github().repository(entry.owner, entry.name)
                         if not repo:
                             # Nope, it's gone.
                             entry.deleted = True
                             msg('{}/{} no longer exists'.format(entry.owner, entry.name))
                         elif repo.full_name in name_mapping:
-                            # It's been renamed.  Try again with the new name.
+                            # It exists in GitHub, and the name it's known by
+                            # is in our name mapping => it's been renamed.
                             entry.owner = repo.owner.login
                             entry.name = repo.name
                             self.add_name_mapping(entry, db)
@@ -843,6 +845,11 @@ class GitHubIndexer():
                             entry = db[repo.id]
                             (found, method, langs, fork) = self.get_languages(entry)
 
+                    if not found:
+                        # 2nd attempt failed. Bail.
+                        msg('Failed to get info about {}/{} (#{}) -- skipping'.format(
+                            entry.owner, entry.name, entry.id))
+                        continue
                     if not entry.deleted:
                         t2 = time()
                         msg('{}/{} (#{}{}) in {:.2f}s via {}'.format(
