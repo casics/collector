@@ -906,6 +906,7 @@ class GitHubIndexer():
     def add_readmes(self, db, id_list=None):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
 #        entries_with_readmes = self.get_readme_list(db)
+        name_mapping = self.get_name_mapping(db)
         failures = 0
         start = time()
 
@@ -915,8 +916,17 @@ class GitHubIndexer():
         # inefficient and takes many minutes to create.
 
         for count, key in enumerate(id_list if id_list else list(db.keys())):
+            pdb.set_trace()
+            if isinstance(key, str):
+                if key.isdigit():
+                    key = int(key)
+                elif key in name_mapping:
+                    key = name_mapping[key]
+                else:
+                    msg('Repository {} is unknown'.format(key))
+                    continue
             if key not in db:
-                msg('repository id {} is unknown'.format(key))
+                msg('Repository id {} is unknown'.format(key))
                 continue
             entry = db[key]
             if not hasattr(entry, 'id'):
@@ -944,8 +954,26 @@ class GitHubIndexer():
                 try:
                     t1 = time()
                     (method, readme) = self.get_readme(entry)
-                    t2 = time()
-                    if readme:
+
+                    if readme == 404:
+                        # Repo was renamed, deleted, made private, or there's
+                        # no home page.  See if our records need to be updated.
+                        repo = self.github().repository(entry.owner, entry.name)
+                        if not repo:
+                            # Nope, it's gone.
+                            entry.deleted = True
+                            msg('{}/{} no longer exists'.format(entry.owner, entry.name))
+                        else:
+                            # It exists in GitHub, and the owner and/or name
+                            # may have changed.
+                            entry.owner = repo.owner.login
+                            entry.name = repo.name
+                            self.add_name_mapping(entry, db)
+                            # Try again with the info returned by github3.
+                            (method, readme) = self.get_readme(entry)
+
+                    if readme and readme != 404:
+                        t2 = time()
                         msg('{}/{} (#{}) {} in {:.2f}s via {}'.format(entry.owner,
                                                                       entry.name,
                                                                       entry.id,
