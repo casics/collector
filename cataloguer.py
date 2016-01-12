@@ -115,8 +115,8 @@ def do_action(action, user_login=None, targets=None, languages=None):
     msg('Started at ', datetime.now())
     started = timer()
 
-    db = Database()
-    dbroot = db.open()
+    dbinterface = Database()
+    db = dbinterface.open()
 
     # Do each host in turn.  (Currently only GitHub.)
 
@@ -124,16 +124,16 @@ def do_action(action, user_login=None, targets=None, languages=None):
         indexer = GitHubIndexer(user_login)
         method = getattr(indexer, action, None)
         if targets and languages:
-            method(dbroot, targets, languages)
+            method(db, targets, languages)
         elif targets:
-            method(dbroot, targets)
+            method(db, targets)
         elif languages:
-            method(dbroot, None, languages)
+            method(db, None, languages)
         else:
-            method(dbroot)
+            method(db)
     finally:
         transaction.commit()
-        db.close()
+        dbinterface.close()
 
     # We're done.  Print some messages and exit.
 
