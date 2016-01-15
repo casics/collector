@@ -88,7 +88,7 @@ def main(user_login=None, index_create=False, index_recreate=False,
     if id:
         targets = [int(x) for x in id.split(',')]
     elif name:
-        targets = [x in name.split(',')]
+        targets = name.split(',')
     elif file:
         with open(file) as f:
             targets = f.read().splitlines()
