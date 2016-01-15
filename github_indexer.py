@@ -302,6 +302,15 @@ class GitHubIndexer():
             return self.from_globals(db, key)
 
 
+    def ensure_id(self, item, name_mapping):
+        if isinstance(item, str):
+            if item.isdigit():
+                return int(item)
+            elif item in name_mapping:
+                return name_mapping[item]
+        return item
+
+
     def direct_api_call(self, url):
         auth = '{0}:{1}'.format(self._login, self._password)
         headers = {
@@ -494,7 +503,7 @@ class GitHubIndexer():
                 last_seen = entry.id
             if entry.languages != None:
                 entries_with_languages.add(key)
-            if entry.readme and entry.readme != '' and entry.readme != -1:
+            if entry.readme and entry.readme != -1:
                 entries_with_readmes.add(key)
             if (num_entries + 1) % 100000 == 0:
                 print(num_entries + 1, '...', end='', flush=True)
@@ -531,19 +540,26 @@ class GitHubIndexer():
         msg('Done.')
 
 
-    def print_index(self, db, id_list=None, filter_by_langs=None):
+    def print_index(self, db, targets=None, filter_by_langs=None):
         '''Print the database contents.'''
         last_seen = self.get_last_seen(db)
         if last_seen:
             msg('Last seen id: {}'.format(last_seen))
         else:
             msg('No record of last seen id.')
+
         if filter_by_langs:
             msg('Limiting output to entries having languages', filter_by_langs)
             find_langs = [Language.identifier(x) for x in filter_by_langs]
         else:
             find_langs = None
-        for key in id_list if id_list else db.keys():
+
+        if targets:
+            mapping = self.get_name_mapping(db)
+            id_list = [self.ensure_id(x, mapping) for x in targets]
+        else:
+            id_list = db.keys()         # Skip making the copy.
+        for key in id_list:
             if key not in db:
                 msg('Identifier {} is not in the database.'.format(key))
             entry = db[key]
@@ -776,27 +792,23 @@ class GitHubIndexer():
             msg('Done.')
 
 
-    def add_languages(self, db, id_list=None):
+    def add_languages(self, db, targets=None):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
-        entries_with_languages = self.get_language_list(db)
-        name_mapping = self.get_name_mapping(db)
         failures = 0
         start = time()
 
-        # If we're iterating over the entire database, we have to make a copy
-        # of the keys list because we can't iterate on the database if the
-        # number of elements may be changing.  Making this list is incredibly
-        # inefficient and takes many minutes to create.
+        if targets:
+            mapping = self.get_name_mapping(db)
+            id_list = [self.ensure_id(x, mapping) for x in targets]
+        else:
+            # If we're iterating over the entire database, we have to make a
+            # copy of the keys list because we can't iterate on the database
+            # if the number of elements may be changing.  Making this list is
+            # incredibly inefficient and takes many minutes to create.
+            id_list = list(db.keys())
 
-        for count, key in enumerate(id_list if id_list else list(db.keys())):
-            if isinstance(key, str):
-                if key.isdigit():
-                    key = int(key)
-                elif key in name_mapping:
-                    key = name_mapping[key]
-                else:
-                    msg('Skipping unknown repo {}'.format(key))
-                    continue
+        entries_with_languages = self.get_language_list(db)
+        for count, key in enumerate(id_list):
             if key not in db:
                 msg('Repository id {} is unknown'.format(key))
                 continue
@@ -804,11 +816,14 @@ class GitHubIndexer():
             entry = db[key]
             if not hasattr(entry, 'id'):
                 continue
-            # if key in entries_with_languages:
-            #     continue
+            if key in entries_with_languages:
+                continue
             if entry.languages:
+                # Has language info, but isn't in our list.  Add it and move on.
                 entries_with_languages.add(key)
                 continue
+            if entry.deleted:
+                msg('Skipping {} because it is marked deleted'.format(entry.id))
 
             if self.api_calls_left() < 1:
                 self.wait_for_reset()
@@ -903,43 +918,41 @@ class GitHubIndexer():
         msg('Done.')
 
 
-    def add_readmes(self, db, id_list=None):
+    def add_readmes(self, db, targets=None):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
-#        entries_with_readmes = self.get_readme_list(db)
-        name_mapping = self.get_name_mapping(db)
         failures = 0
         start = time()
 
-        # If we're iterating over the entire database, we have to make a copy
-        # of the keys list because we can't iterate on the database if the
-        # number of elements may be changing.  Making this list is incredibly
-        # inefficient and takes many minutes to create.
+        if targets:
+            mapping = self.get_name_mapping(db)
+            id_list = [self.ensure_id(x, mapping) for x in targets]
+        else:
+            # If we're iterating over the entire database, we have to make a
+            # copy of the keys list because we can't iterate on the database
+            # if the number of elements may be changing.  Making this list is
+            # incredibly inefficient and takes many minutes to create.
+            id_list = list(db.keys())
 
-        for count, key in enumerate(id_list if id_list else list(db.keys())):
-            if isinstance(key, str):
-                if key.isdigit():
-                    key = int(key)
-                elif key in name_mapping:
-                    key = name_mapping[key]
-                else:
-                    msg('Repository {} is unknown'.format(key))
-                    continue
+        entries_with_readmes = self.get_readme_list(db)
+        for count, key in enumerate(id_list):
             if key not in db:
                 msg('Repository id {} is unknown'.format(key))
                 continue
             entry = db[key]
             if not hasattr(entry, 'id'):
                 continue
-            # if key in entries_with_readmes:
-            #     continue
+            if key in entries_with_readmes:
+                continue
             if entry.readme == -1:
                 # We already tried to get this one, and it was empty.
                 continue
             if entry.readme:
                 # It has a non-empty readme field but it wasn't in our
                 # list of entries with readme's.  Add it and move along.
-#                entries_with_readmes.add(key)
+                entries_with_readmes.add(key)
                 continue
+            if entry.deleted:
+                msg('Skipping {} because it is marked deleted'.format(entry.id))
 
             if self.api_calls_left() < 1:
                 self.wait_for_reset()
@@ -984,7 +997,7 @@ class GitHubIndexer():
                         entry.readme = zlib.compress(bytes(readme, 'utf-8'))
                         entry.refreshed = now_timestamp()
                         entry._p_changed = True # Needed for ZODB record updates.
-#                        entries_with_readmes.add(key)
+                        entries_with_readmes.add(key)
                     else:
                         # If GitHub doesn't return a README file, we need to
                         # record something to indicate that we already tried.
@@ -1016,24 +1029,28 @@ class GitHubIndexer():
             if count % 100 == 0:
                 msg('{} [{:2f}]'.format(count, time() - start))
                 start = time()
-            sleep(0.15) # Be nicer to their servers.
 
         transaction.commit()
         msg('')
         msg('Done.')
 
 
-    def add_fork_info(self, db, id_list=None):
+    def add_fork_info(self, db, targets=None):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
         failures = 0
         start = time()
 
-        # If we're iterating over the entire database, we have to make a copy
-        # of the keys list because we can't iterate on the database if the
-        # number of elements may be changing.  Making this list is incredibly
-        # inefficient and takes many minutes to create.
+        if targets:
+            mapping = self.get_name_mapping(db)
+            id_list = [self.ensure_id(x, mapping) for x in targets]
+        else:
+            # If we're iterating over the entire database, we have to make a
+            # copy of the keys list because we can't iterate on the database
+            # if the number of elements may be changing.  Making this list is
+            # incredibly inefficient and takes many minutes to create.
+            id_list = list(db.keys())
 
-        for count, key in enumerate(id_list if id_list else list(db.keys())):
+        for count, key in enumerate(id_list):
             if key not in db:
                 msg('repository id {} is unknown'.format(key))
                 continue
@@ -1043,6 +1060,8 @@ class GitHubIndexer():
             if entry.copy_of != None:
                 # Already have the info.
                 continue
+            if entry.deleted:
+                msg('Skipping {} because it is marked deleted'.format(entry.id))
 
             retry = True
             while retry and failures < self._max_failures:
@@ -1091,6 +1110,28 @@ class GitHubIndexer():
         transaction.commit()
         msg('')
         msg('Done.')
+
+
+    def mark_deleted(self, db, targets=None):
+        start = time()
+        mapping = self.get_name_mapping(db)
+        list = [self.ensure_id(x, mapping) for x in targets]
+        for count, key in enumerate(list):
+            if key not in db:
+                msg('repository id {} is unknown'.format(key))
+                continue
+            entry = db[key]
+            entry.deleted = True
+            entry._p_changed = True # Needed for ZODB record updates.
+            if count % 1000 == 0:
+                msg('{} [{:2f}]'.format(count, time() - start))
+                start = time()
+                Transaction.commit()
+
+        transaction.commit()
+        msg('')
+        msg('Done.')
+
 
 
     # def locate_by_languages(self, db):
