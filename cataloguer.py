@@ -81,16 +81,20 @@ from github_indexer import GitHubIndexer
 def main(user_login=None, index_create=False, index_recreate=False,
          print_details=False, file=None, id=None, name=None, languages=None,
          index_forks=False, index_langs=False, print_index=False,
-         print_ids=False, index_readmes=False, summarize=False, update=False):
+         print_ids=False, index_readmes=False, summarize=False, update=False,
+         delete=False):
     '''Generate or print index of projects found in repositories.'''
 
     if id:
-        targets = [int(id)]
+        targets = [int(x) for x in id.split(',')]
+    elif name:
+        targets = [x in name.split(',')]
     elif file:
         with open(file) as f:
-            targets = [int(x) for x in f.read().splitlines()]
-    elif name:
-        targets = [name]
+            targets = f.read().splitlines()
+            if len(targets) > 0:
+                if targets[0].isdigit():
+                    targets = [int(x) for x in targets]
     else:
         targets = None
 
@@ -107,6 +111,7 @@ def main(user_login=None, index_create=False, index_recreate=False,
     elif index_langs:    do_action("add_languages",     user_login, targets)
     elif index_forks:    do_action("add_fork_info",     user_login, targets)
     elif index_readmes:  do_action("add_readmes",       user_login, targets)
+    elif delete:         do_action("mark_deleted",      user_login, targets)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
@@ -163,6 +168,7 @@ main.__annotations__ = dict(
     index_readmes  = ('gather README files',                      'flag',   'r'),
     summarize      = ('summarize database statistics',            'flag',   's'),
     update         = ('update some internal database data',       'flag',   'u'),
+    delete         = ('mark entries as deleted',                  'flag',   'D'),
 )
 
 # Entry point
