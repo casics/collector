@@ -169,6 +169,11 @@ class GitHubIndexer():
 
     def add_record_from_github3(self, repo, db, languages=None):
         # Match impedances between github3's record format and ours.
+
+        if repo.fork and repo.parent:
+            copy_info = repo.parent.owner.login + '/' + repo.parent.name
+        else:
+            copy_info = repo.fork
         if repo.id in db:
             # Update an existing entry.  The github3 record has less info
             # than we keep, so grab the old values for the other fields, but
@@ -176,9 +181,11 @@ class GitHubIndexer():
             old_entry = db[repo.id]
             db[repo.id].name        = repo.name
             db[repo.id].owner       = repo.owner.login
+            db[repo.id].owner_type  = canonicalize_owner_type(repo.owner.type)
             db[repo.id].description = repo.description
-            db[repo.id].copy_of     = repo.fork        # Only a Boolean.
+            db[repo.id].copy_of     = copy_info
             db[repo.id].owner_type  = repo.owner.type
+            db[repo.id].created     = canonicalize_timestamp(repo.created_at)
             db[repo.id].refreshed   = now_timestamp()
         else:
             # New entry.
@@ -187,8 +194,9 @@ class GitHubIndexer():
                                    name=repo.name,
                                    owner=repo.owner.login,
                                    description=repo.description,
-                                   copy_of=repo.fork,  # Only a Boolean.
+                                   copy_of=copy_info,
                                    owner_type=repo.owner.type,
+                                   created=repo.created_at,
                                    refreshed=now_timestamp())
         # Update other info.
         self.add_name_mapping(db[repo.id], db)
@@ -790,6 +798,110 @@ class GitHubIndexer():
             msg('Stopping because of too many repeated failures.')
         else:
             msg('Done.')
+
+
+    def update_entries(self, db, targets=None):
+        msg('Initial GitHub API calls remaining: ', self.api_calls_left())
+        failures = 0
+        start = time()
+
+        if targets:
+            mapping = self.get_name_mapping(db)
+            id_list = [self.ensure_id(x, mapping) for x in targets]
+        else:
+            # If we're iterating over the entire database, we have to make a
+            # copy of the keys list because we can't iterate on the database
+            # if the number of elements may be changing.  Making this list is
+            # incredibly inefficient and takes many minutes to create.
+            id_list = list(db.keys())
+
+        entries_with_languages = self.get_language_list(db)
+        entries_with_readmes = self.get_readme_list(db)
+        for count, key in enumerate(id_list):
+            if key not in db:
+                msg('Repository id {} is unknown'.format(key))
+                continue
+            entry = db[key]
+            if not hasattr(entry, 'id'):
+                continue
+
+            if self.api_calls_left() < 1:
+                self.wait_for_reset()
+                failures = 0
+                msg('Continuing')
+
+            retry = True
+            while retry and failures < self._max_failures:
+                # Don't retry unless the problem may be transient.
+                retry = False
+                try:
+                    t1 = time()
+                    repo = self.github().repository(entry.owner, entry.name)
+                    if not repo:
+                        entry.deleted = True
+                        msg('{}/{} (#{}) deleted'.format(entry.owner, entry.name,
+                                                         entry.id))
+                    else:
+                        entry.owner = repo.owner.login
+                        entry.name = repo.name
+                        self.add_record_from_github3(repo, db)
+                        # We know the repo exists.  Get more info but use our
+                        # http-based method because it gets more data.
+                        (found, method, langs, fork) = self.get_languages(entry)
+                        if not found:
+                            msg('Failed to update {}/{} (#{}) but it supposedly exists'.format(
+                                entry.owner, entry.name, entry.id))
+                        else:
+                            raw_languages = [lang for lang in langs]
+                            languages = [Language.identifier(x) for x in raw_languages]
+                            entry.languages = languages
+                            if key not in entries_with_languages:
+                                msg('entries_with_languages <-- {}/{} (#{})'.format(
+                                    entry.owner, entry.name, entry.id))
+
+                        # Ditto for the README.
+                        (method, readme) = self.get_readme(entry)
+                        if readme and readme != 404:
+                            entry.readme = zlib.compress(bytes(readme, 'utf-8'))
+                            if key not in entries_with_readmes:
+                                msg('entries_with_readmes <-- {}/{} (#{})'.format(
+                                    entry.owner, entry.name, entry.id))
+
+                        t2 = time()
+                        msg('{}/{} (#{}) in {:.2f}s'.format(
+                            entry.owner, entry.name, entry.id, t2 - t1))
+
+                    entry.refreshed = now_timestamp()
+                    entry._p_changed = True # Needed for ZODB record updates.
+                    failures = 0
+                except github3.GitHubError as err:
+                    if err.code == 403:
+                        msg('GitHub API rate limit reached')
+                        self.wait_for_reset()
+                        loop_count = 0
+                        calls_left = self.api_calls_left()
+                    else:
+                        msg('GitHub API exception: {0}'.format(err))
+                        failures += 1
+                        # Might be a network or other transient error.
+                        retry = True
+                except Exception as err:
+                    msg('Exception for "{}/{}": {}'.format(entry.owner, entry.name, err))
+                    failures += 1
+                    # Might be a network or other transient error.
+                    retry = True
+
+            if failures >= self._max_failures:
+                msg('Stopping because of too many consecutive failures')
+                break
+            if count % 100 == 0:
+                transaction.commit()
+                msg('{} [{:2f}]'.format(count, time() - start))
+                start = time()
+
+        transaction.commit()
+        msg('')
+        msg('Done.')
 
 
     def add_languages(self, db, targets=None):
