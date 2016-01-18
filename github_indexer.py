@@ -632,6 +632,8 @@ class GitHubIndexer():
 
 
     def print_details(self, db, targets):
+        if not targets:
+            raise ValueError('Must identify specific repositories to print')
         width = len('DESCRIPTION:')
         mapping = self.get_name_mapping(db)
         for item in targets:
@@ -1225,6 +1227,8 @@ class GitHubIndexer():
 
 
     def mark_deleted(self, db, targets=None):
+        if not targets:
+            raise ValueError('Must identify specific repositories to delete.')
         start = time()
         mapping = self.get_name_mapping(db)
         list = [self.ensure_id(x, mapping) for x in targets]
