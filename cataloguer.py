@@ -82,7 +82,7 @@ def main(user_login=None, index_create=False, index_recreate=False,
          file=None, languages=None, index_forks=False, index_langs=False,
          index_readmes=False, print_details=False, print_index=False,
          summarize=False, print_ids=False, update=False, update_internal=False,
-         delete=False, *repos):
+         list_deleted=False, delete=False, *repos):
     '''Generate or print index of projects found in repositories.'''
 
     def convert(arg):
@@ -109,6 +109,7 @@ def main(user_login=None, index_create=False, index_recreate=False,
     elif index_forks:     do_action("add_fork_info",     user_login, repos)
     elif index_readmes:   do_action("add_readmes",       user_login, repos)
     elif delete:          do_action("mark_deleted",      user_login, repos)
+    elif list_deleted:    do_action("list_deleted",      user_login, repos)
     elif update:          do_action("update_entries",    user_login, repos)
     elif update_internal: do_action("update_internal",   user_login)
     else:
@@ -166,6 +167,7 @@ main.__annotations__ = dict(
     summarize       = ('summarize database statistics',              'flag',   'S'),
     update          = ('update specific entries by querying GitHub', 'flag',   'u'),
     update_internal = ('update internal database tables',            'flag',   'U'),
+    list_deleted    = ('list deleted entries',                       'flag',   'x'),
     delete          = ('mark specific entries as deleted',           'flag',   'X'),
     repos           = 'repository identifiers or names',
 )

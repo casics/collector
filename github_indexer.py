@@ -1249,6 +1249,22 @@ class GitHubIndexer():
         msg('Done.')
 
 
+    def list_deleted(self, db, targets=None):
+        if targets:
+            mapping = self.get_name_mapping(db)
+            id_list = [self.ensure_id(x, mapping) for x in targets]
+        else:
+            # Should make a copy, but skipping it for now.
+            id_list = db.keys()
+
+        for key in id_list:
+            entry = db[key]
+            if not hasattr(entry, 'id'):
+                continue
+            if  entry.deleted:
+                msg('{}/{} (#{})'.format(entry.owner, entry.name, entry.id))
+        msg('Done.')
+
 
     # def locate_by_languages(self, db):
     #     msg('Examining our current database')
