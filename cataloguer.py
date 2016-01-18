@@ -79,39 +79,37 @@ from github_indexer import GitHubIndexer
 # should hopefully be possible.
 
 def main(user_login=None, index_create=False, index_recreate=False,
-         file=None, id=None, name=None, languages=None,
-         index_forks=False, index_langs=False, index_readmes=False,
-         print_details=False, print_index=False, print_ids=False,
-         summarize=False, update=False, update_internal=False, delete=False):
+         file=None, languages=None, index_forks=False, index_langs=False,
+         index_readmes=False, print_details=False, print_index=False,
+         summarize=False, print_ids=False, update=False, update_internal=False,
+         delete=False, *repos):
     '''Generate or print index of projects found in repositories.'''
 
-    if id:
-        targets = [int(x) for x in id.split(',')]
-    elif name:
-        targets = [x in name.split(',')]
+    def convert(arg):
+        return int(arg) if (arg and arg.isdigit()) else arg
+
+    if repos:
+        repos = [convert(x) for x in repos]
     elif file:
         with open(file) as f:
-            targets = f.read().splitlines()
-            if len(targets) > 0:
-                if targets[0].isdigit():
-                    targets = [int(x) for x in targets]
-    else:
-        targets = None
+            repos = f.read().splitlines()
+            if len(repos) > 0 and repos[0].isdigit():
+                repos = [int(x) for x in repos]
 
     if languages:
         languages = languages.split(',')
 
     if   summarize:       do_action("print_summary",     user_login)
     elif print_ids:       do_action("print_indexed_ids", user_login)
-    elif print_index:     do_action("print_index",       user_login, targets, languages)
-    elif print_details:   do_action("print_details",     user_login, targets)
-    elif index_create:    do_action("create_index",      user_login, targets)
-    elif index_recreate:  do_action("recreate_index",    user_login, targets)
-    elif index_langs:     do_action("add_languages",     user_login, targets)
-    elif index_forks:     do_action("add_fork_info",     user_login, targets)
-    elif index_readmes:   do_action("add_readmes",       user_login, targets)
-    elif delete:          do_action("mark_deleted",      user_login, targets)
-    elif update:          do_action("update_entries",    user_login, targets)
+    elif print_index:     do_action("print_index",       user_login, repos, languages)
+    elif print_details:   do_action("print_details",     user_login, repos)
+    elif index_create:    do_action("create_index",      user_login, repos)
+    elif index_recreate:  do_action("recreate_index",    user_login, repos)
+    elif index_langs:     do_action("add_languages",     user_login, repos)
+    elif index_forks:     do_action("add_fork_info",     user_login, repos)
+    elif index_readmes:   do_action("add_readmes",       user_login, repos)
+    elif delete:          do_action("mark_deleted",      user_login, repos)
+    elif update:          do_action("update_entries",    user_login, repos)
     elif update_internal: do_action("update_internal",   user_login)
     else:
         raise SystemExit('No action specified. Use -h for help.')
@@ -157,9 +155,7 @@ main.__annotations__ = dict(
     user_login      = ('use specified account login',                'option', 'a'),
     index_create    = ('gather basic index data',                    'flag',   'c'),
     index_recreate  = ('re-gather basic index data',                 'flag',   'C'),
-    file            = ('limit to projects listed in file',           'option', 'f'),
-    id              = ('limit to single supplied repository id',     'option', 'i'),
-    name            = ('limit to single supplied repository name',   'option', 'n'),
+    file            = ('get repo names or identifiers from file',    'option', 'f'),
     languages       = ('limit printing to specific languages',       'option', 'L'),
     index_forks     = ('gather repository copy/fork status',         'flag',   'k'),
     index_langs     = ('gather programming languages',               'flag',   'l'),
@@ -171,6 +167,7 @@ main.__annotations__ = dict(
     update          = ('update specific entries by querying GitHub', 'flag',   'u'),
     update_internal = ('update internal database tables',            'flag',   'U'),
     delete          = ('mark specific entries as deleted',           'flag',   'X'),
+    repos           = 'repository identifiers or names',
 )
 
 # Entry point
