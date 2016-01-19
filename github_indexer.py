@@ -119,6 +119,12 @@ class GitHubIndexer():
     def api_calls_left(self):
         '''Returns an integer.'''
         try:
+            response = self.direct_api_call('/rate_limit')
+            if response and response != 404:
+                content = json.loads(response)
+                if 'rate' in content:
+                    return content['rate']['remaining']
+            # Backup approach if we fail:
             rate_limit = self.github().rate_limit()
             return rate_limit['resources']['core']['remaining']
         except Exception as err:
