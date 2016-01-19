@@ -187,6 +187,7 @@ class GitHubIndexer():
             db[repo.id].owner_type  = repo.owner.type
             db[repo.id].created     = canonicalize_timestamp(repo.created_at)
             db[repo.id].refreshed   = now_timestamp()
+            db[repo.id].deleted     = False
         else:
             # New entry.
             db[repo.id] = RepoData(host=Host.GITHUB,
