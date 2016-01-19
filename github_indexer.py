@@ -790,11 +790,16 @@ class GitHubIndexer():
                 msg('github3 repository iterator reports it is done')
                 break
             except github3.GitHubError as err:
+                # Occasionally an error even when not over the rate limit.
                 if err.code == 403:
-                    msg('GitHub API rate limit reached')
-                    self.wait_for_reset()
-                    loop_count = 0
+                    msg('Code 403 for {}'.format(repo.id))
                     calls_left = self.api_calls_left()
+                    if calls_left < 1:
+                        self.wait_for_reset()
+                        calls_left = self.api_calls_left()
+                        loop_count = 0
+                    else:
+                        failures += 1
                 else:
                     msg('github3 generated an exception: {0}'.format(err))
                     failures += 1
@@ -884,11 +889,20 @@ class GitHubIndexer():
                     entry._p_changed = True # Needed for ZODB record updates.
                     failures = 0
                 except github3.GitHubError as err:
+                    # Occasionally an error even when not over the rate limit.
                     if err.code == 403:
-                        msg('GitHub API rate limit reached')
-                        self.wait_for_reset()
-                        loop_count = 0
                         calls_left = self.api_calls_left()
+                        if calls_left < 1:
+                            msg('GitHub API rate limit exceeded')
+                            self.wait_for_reset()
+                            loop_count = 0
+                            calls_left = self.api_calls_left()
+                            retry = True
+                        else:
+                            msg('GitHub replied with code 403 for {}/{} ({})'.format(
+                                entry.owner, entry.name, entry.id))
+                            retry = False
+                            failures += 1
                     else:
                         msg('GitHub API exception: {0}'.format(err))
                         failures += 1
@@ -1005,11 +1019,20 @@ class GitHubIndexer():
                     entry._p_changed = True # Needed for ZODB record updates.
                     failures = 0
                 except github3.GitHubError as err:
+                    # Occasionally an error even when not over the rate limit.
                     if err.code == 403:
-                        msg('GitHub API rate limit reached')
-                        self.wait_for_reset()
-                        loop_count = 0
                         calls_left = self.api_calls_left()
+                        if calls_left < 1:
+                            msg('GitHub API rate limit exceeded')
+                            self.wait_for_reset()
+                            loop_count = 0
+                            calls_left = self.api_calls_left()
+                            retry = True
+                        else:
+                            msg('GitHub replied with code 403 for {}/{} ({})'.format(
+                                entry.owner, entry.name, entry.id))
+                            retry = False
+                            failures += 1
                     else:
                         msg('GitHub API exception: {0}'.format(err))
                         failures += 1
@@ -1127,11 +1150,20 @@ class GitHubIndexer():
                     entry._p_changed = True # Needed for ZODB record updates.
                     failures = 0
                 except github3.GitHubError as err:
+                    # Occasionally an error even when not over the rate limit.
                     if err.code == 403:
-                        msg('GitHub API rate limit reached')
-                        self.wait_for_reset()
-                        loop_count = 0
                         calls_left = self.api_calls_left()
+                        if calls_left < 1:
+                            msg('GitHub API rate limit exceeded')
+                            self.wait_for_reset()
+                            loop_count = 0
+                            calls_left = self.api_calls_left()
+                            retry = True
+                        else:
+                            msg('GitHub replied with code 403 for {}/{} ({})'.format(
+                                entry.owner, entry.name, entry.id))
+                            retry = False
+                            failures += 1
                     else:
                         msg('GitHub API exception: {0}'.format(err))
                         failures += 1
@@ -1204,11 +1236,20 @@ class GitHubIndexer():
                             entry.owner, entry.name, entry.id))
                     failures = 0
                 except github3.GitHubError as err:
+                    # Occasionally an error even when not over the rate limit.
                     if err.code == 403:
-                        msg('GitHub API rate limit reached')
-                        self.wait_for_reset()
-                        loop_count = 0
                         calls_left = self.api_calls_left()
+                        if calls_left < 1:
+                            msg('GitHub API rate limit exceeded')
+                            self.wait_for_reset()
+                            loop_count = 0
+                            calls_left = self.api_calls_left()
+                            retry = True
+                        else:
+                            msg('GitHub replied with code 403 for {}/{} ({})'.format(
+                                entry.owner, entry.name, entry.id))
+                            retry = False
+                            failures += 1
                     else:
                         msg('GitHub API exception: {0}'.format(err))
                         failures += 1
