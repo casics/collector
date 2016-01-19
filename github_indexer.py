@@ -122,8 +122,7 @@ class GitHubIndexer():
             response = self.direct_api_call('/rate_limit')
             if response and response != 404:
                 content = json.loads(response)
-                if 'rate' in content:
-                    return content['rate']['remaining']
+                return content['rate']['remaining']
             # Backup approach if we fail:
             rate_limit = self.github().rate_limit()
             return rate_limit['resources']['core']['remaining']
@@ -145,6 +144,7 @@ class GitHubIndexer():
 
 
     def wait_for_reset(self):
+        transaction.commit()
         reset_time = datetime.fromtimestamp(self.api_reset_time())
         time_delta = reset_time - datetime.now()
         msg('Sleeping until ', reset_time)
