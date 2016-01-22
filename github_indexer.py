@@ -947,7 +947,6 @@ class GitHubIndexer():
             if key not in db:
                 msg('Repository id {} is unknown'.format(key))
                 continue
-
             entry = db[key]
             if not hasattr(entry, 'id'):
                 continue
@@ -980,12 +979,12 @@ class GitHubIndexer():
                             # Nope, it's gone.
                             entry.deleted = True
                             msg('{}/{} no longer exists'.format(entry.owner, entry.name))
-                        elif repo.full_name in name_mapping:
-                            # It exists in GitHub, and the name it's known by
-                            # is in our name mapping => it's been renamed.
+                        elif entry.owner != repo.owner.login or entry.name != repo.name:
+                            # The owner or name changed.
                             entry.owner = repo.owner.login
                             entry.name = repo.name
                             self.add_name_mapping(entry, db)
+                            # Try again with the info returned by github3.
                             (found, method, langs, fork) = self.get_languages(entry)
                         else:
                             # Either it's not in our db, or it's missing from
