@@ -638,12 +638,13 @@ class GitHubIndexer():
             msg('Database has {} total GitHub entries'.format(total))
 
 
-    def print_details(self, db, targets):
+    def print_details(self, db, targets=None):
         if not targets:
-            raise ValueError('Must identify specific repositories to print')
+            targets = db.keys()         # Skip making the copy.
         width = len('DESCRIPTION:')
         mapping = self.get_name_mapping(db)
         for item in targets:
+            if item == 0: continue
             msg('='*70)
             if isinstance(item, str):
                 if item.isdigit():
