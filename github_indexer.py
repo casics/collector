@@ -666,7 +666,11 @@ class GitHubIndexer():
             msg('OWNER:'.ljust(width), entry.owner)
             msg('OWNER TYPE:'.ljust(width),
                 'User' if entry.owner_type == RepoData.USER_OWNER else 'Organization')
-            msg('DESCRIPTION:'.ljust(width), entry.description)
+            if entry.description:
+                msg('DESCRIPTION:'.ljust(width),
+                    entry.description.encode(sys.stdout.encoding, errors='replace'))
+            else:
+                msg('DESCRIPTION:')
             if entry.languages:
                 msg('LANGUAGES:'.ljust(width),
                     ', '.join(Language.name(x) for x in entry.languages))
@@ -801,6 +805,10 @@ class GitHubIndexer():
                         loop_count = 0
                     else:
                         failures += 1
+                elif err.code == 451:
+                    msg('GitHub replied with code 451 (access blocked) for {}/{} ({})'.format(
+                        entry.owner, entry.name, entry.id))
+                    retry = False
                 else:
                     msg('github3 generated an exception: {0}'.format(err))
                     failures += 1
@@ -839,6 +847,10 @@ class GitHubIndexer():
             entry = db[key]
             if not hasattr(entry, 'id'):
                 continue
+
+            # FIXME TEMPORARY HACK
+            # if entry.refreshed:
+            #     continue
 
             if self.api_calls_left() < 1:
                 self.wait_for_reset()
@@ -902,8 +914,14 @@ class GitHubIndexer():
                         else:
                             msg('GitHub replied with code 403 for {}/{} ({})'.format(
                                 entry.owner, entry.name, entry.id))
+                            entry.refreshed = now_timestamp()
                             retry = False
                             failures += 1
+                    elif err.code == 451:
+                        msg('GitHub replied with code 451 (access blocked) for {}/{} ({})'.format(
+                            entry.owner, entry.name, entry.id))
+                        entry.refreshed = now_timestamp()
+                        retry = False
                     else:
                         msg('GitHub API exception: {0}'.format(err))
                         failures += 1
@@ -1031,8 +1049,14 @@ class GitHubIndexer():
                         else:
                             msg('GitHub replied with code 403 for {}/{} ({})'.format(
                                 entry.owner, entry.name, entry.id))
+                            entry.refreshed = now_timestamp()
                             retry = False
                             failures += 1
+                    elif err.code == 451:
+                        msg('GitHub replied with code 451 (access blocked) for {}/{} ({})'.format(
+                            entry.owner, entry.name, entry.id))
+                        entry.refreshed = now_timestamp()
+                        retry = False
                     else:
                         msg('GitHub API exception: {0}'.format(err))
                         failures += 1
@@ -1162,8 +1186,14 @@ class GitHubIndexer():
                         else:
                             msg('GitHub replied with code 403 for {}/{} ({})'.format(
                                 entry.owner, entry.name, entry.id))
+                            entry.refreshed = now_timestamp()
                             retry = False
                             failures += 1
+                    elif err.code == 451:
+                        msg('GitHub replied with code 451 (access blocked) for {}/{} ({})'.format(
+                            entry.owner, entry.name, entry.id))
+                        entry.refreshed = now_timestamp()
+                        retry = False
                     else:
                         msg('GitHub API exception: {0}'.format(err))
                         failures += 1
@@ -1248,8 +1278,13 @@ class GitHubIndexer():
                         else:
                             msg('GitHub replied with code 403 for {}/{} ({})'.format(
                                 entry.owner, entry.name, entry.id))
+                            entry.refreshed = now_timestamp()
                             retry = False
                             failures += 1
+                    elif err.code == 451:
+                        msg('GitHub replied with code 451 (access blocked) for {}/{} ({})'.format(
+                            entry.owner, entry.name, entry.id))
+                        retry = False
                     else:
                         msg('GitHub API exception: {0}'.format(err))
                         failures += 1
