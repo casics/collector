@@ -879,8 +879,7 @@ class GitHubIndexer():
                             msg('Failed to update {}/{} (#{}) but it supposedly exists'.format(
                                 entry.owner, entry.name, entry.id))
                         else:
-                            raw_languages = [lang for lang in langs]
-                            languages = [Language.identifier(x) for x in raw_languages]
+                            languages = [Language.identifier(x) for x in langs]
                             entry.languages = languages
                             if key not in entries_with_languages:
                                 msg('entries_with_languages <-- {}/{} (#{})'.format(
