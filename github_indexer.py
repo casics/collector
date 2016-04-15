@@ -1022,8 +1022,7 @@ class GitHubIndexer():
                             entry.owner, entry.name, entry.id,
                             ', a fork of {}'.format(fork) if fork else '',
                             t2-t1, method))
-                        raw_languages = [lang for lang in langs]
-                        languages = [Language.identifier(x) for x in raw_languages]
+                        languages = [Language.identifier(x) for x in langs]
                         entry.languages = languages
                         entries_with_languages.add(key)
                         if fork:
