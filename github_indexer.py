@@ -188,6 +188,9 @@ class GitHubIndexer():
                 # so we return an empty string.
                 msg('Undecodable content received for {}'.format(url))
                 return ''
+        elif response.status == 301:
+            # Redirection
+            return self.direct_api_call(response.getheader('Location'))
         else:
             msg('Response status {} for {}'.format(response.status, url))
             return response.status
@@ -526,19 +529,37 @@ class GitHubIndexer():
             return False
 
 
+    def extract_description_from_html(self, html):
+        if not html:
+            return False
+        marker = 'itemprop="about">'
+        marker_len = len(marker)
+        description = []
+        startpoint = html.find(marker)
+        if startpoint > 0:
+            endpoint = html.find('</span>', startpoint)
+            description = html[startpoint + marker_len : endpoint]
+        if description:
+            return description.strip()
+        else:
+            return None
+
+
     def get_languages(self, entry):
         # First try to get it by scraping the HTTP web page for the project.
         # This saves an API call.
+        languages = []
+        fork_info = None
+        description = None
         (code, html) = self.get_home_page(entry)
         if code == 404:
-            return (False, 'http', [], None)
+            return (False, 'http', [], None, None)
         if html:
-            languages = self.extract_languages_from_html(html)
+            languages   = self.extract_languages_from_html(html)
+            fork_info   = self.extract_fork_from_html(html)
+            description = self.extract_description_from_html(html)
             if languages:
-                # Succeeded in getting language info by scraping.
-                # While we're here, pull out some other data too:
-                fork_info = self.extract_fork_from_html(html)
-                return (True, 'http', languages, fork_info)
+                return (True, 'http', languages, fork_info, description)
 
         # Failed to get it by scraping.  Try the GitHub API.
         # Using github3.py would cause 2 API calls per repo to get this info.
@@ -547,11 +568,11 @@ class GitHubIndexer():
                                                                     entry['name'])
         response = self.direct_api_call(url)
         if response == 404 or response == 403:
-            return (False, 'api', [], None)
+            return (False, 'api', [], fork_info, description)
         elif response == None:
-            return (True, 'api', [], None)
+            return (True, 'api', [], fork_info, description)
         else:
-            return (True, 'api', json.loads(response), None)
+            return (True, 'api', json.loads(response), fork_info, description)
 
 
     def get_readme(self, entry, http_only=False):
@@ -606,7 +627,7 @@ class GitHubIndexer():
     def add_languages(self, targets=None):
         def body_function(entry):
             t1 = time()
-            (found, method, langs, fork) = self.get_languages(entry)
+            (found, method, langs, fork, desc) = self.get_languages(entry)
             if not found:
                 # Repo was renamed, deleted, made private, or there's
                 # no home page.  See if our records need to be updated.
@@ -623,7 +644,7 @@ class GitHubIndexer():
                     self.update_field(entry, 'owner', repo.owner.login)
                     self.update_field(entry, 'name', repo.name)
                     # Try again with the info returned by github3.
-                    (found, method, langs, fork) = self.get_languages(entry)
+                    (found, method, langs, fork, desc) = self.get_languages(entry)
                 else:
                     msg('*** {} appears to be private'.format(summarize(entry)))
                     self.update_field(entry, 'is_visible', False)
@@ -642,6 +663,8 @@ class GitHubIndexer():
                     self.update_field(entry, 'languages', self.language_list(langs))
                 else:
                     self.update_field(entry, 'languages', -1)
+                if desc:
+                    self.update_field(entry, 'description', desc)
                 if fork:
                     # Don't change copy_of if we couldn't read it while
                     # looking for languages, because we might have stored
