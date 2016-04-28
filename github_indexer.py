@@ -670,6 +670,7 @@ class GitHubIndexer():
                     # looking for languages, because we might have stored
                     # it previously using a different data source.
                     self.update_field(entry, 'fork_of', fork)
+                self.update_field(entry, 'is_visible', True)
 
         # Set up selection criteria and start the loop
         selected_repos = {'languages': {"$eq" : []}, 'is_deleted': False,
@@ -690,6 +691,7 @@ class GitHubIndexer():
                     self.update_field(entry, 'is_deleted', True)
                     self.update_field(entry, 'is_visible', False)
                     msg('*** {} no longer exists'.format(summarize(entry)))
+                    return
                 elif entry['owner'] != repo.owner.login \
                      or entry['name'] != repo.name:
                     # The owner or name changed.
@@ -712,6 +714,7 @@ class GitHubIndexer():
                 # The something can't be '', or None, or 0.  We use -1.
                 msg('No readme for {}'.format(summarize(entry)))
                 self.update_field(entry, 'readme', -1)
+            self.update_field(entry, 'is_visible', True)
 
         # Set up selection criteria and start the loop
         selected_repos = {'readme': {"$eq" : ''}, 'is_deleted': False,
