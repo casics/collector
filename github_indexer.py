@@ -552,7 +552,9 @@ class GitHubIndexer():
         fork_info = None
         description = None
         (code, html) = self.get_home_page(entry)
-        if code == 404:
+        if code in [404, 451]:
+            # 404 = doesn't exist.  451 = unavailable for legal reasons.
+            # Don't bother try to get it via API either.
             return (False, 'http', [], None, None)
         if html:
             languages   = self.extract_languages_from_html(html)
@@ -567,7 +569,7 @@ class GitHubIndexer():
         url = 'https://api.github.com/repos/{}/{}/languages'.format(entry['owner'],
                                                                     entry['name'])
         response = self.direct_api_call(url)
-        if response == 404 or response == 403:
+        if isinstance(response, int) and response >= 400:
             return (False, 'api', [], fork_info, description)
         elif response == None:
             return (True, 'api', [], fork_info, description)
