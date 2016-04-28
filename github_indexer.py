@@ -303,11 +303,11 @@ class GitHubIndexer():
 
     def ensure_id(self, item):
         if isinstance(item, int):
-            if self.db.find_one({'_id': item}):
+            # if self.db.find_one({'_id': item}):
                 return item
-            else:
-                msg_notfound(item)
-                return None
+            # else:
+            #     msg_notfound(item)
+            #     return None
         elif isinstance(item, str):
             if item.isdigit():
                 return int(item)
