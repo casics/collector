@@ -57,7 +57,6 @@
 #     (cataloguer.py) to print some information in the database.  E.g.,
 #     "cataloguer -p" will print a summary of every entry in the database.
 
-import pdb
 import sys
 import os
 import plac
@@ -65,11 +64,11 @@ from datetime import datetime
 from time import sleep
 from timeit import default_timer as timer
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "../common"))
-from dbinterface import *
-from utils import *
-from reporecord import *
+sys.path.append('../database')
+sys.path.append('../comment')
 
+from casicsdb import *
+from utils import *
 from github_indexer import GitHubIndexer
 
 
@@ -78,11 +77,11 @@ from github_indexer import GitHubIndexer
 # Currently this only does GitHub, but extending this to handle other hosts
 # should hopefully be possible.
 
-def main(user_login=None, index_create=False, index_recreate=False,
+def main(github_login=None, index_create=False, index_recreate=False,
          file=None, languages=None, index_forks=False, index_langs=False,
          index_readmes=False, print_details=False, print_index=False,
          summarize=False, print_ids=False, update=False, update_internal=False,
-         list_deleted=False, delete=False, *repos):
+         list_deleted=False, delete=False, http_only=False, *repos):
     '''Generate or print index of projects found in repositories.'''
 
     def convert(arg):
@@ -99,46 +98,45 @@ def main(user_login=None, index_create=False, index_recreate=False,
     if languages:
         languages = languages.split(',')
 
-    if   summarize:       do_action("print_summary",     user_login)
-    elif print_ids:       do_action("print_indexed_ids", user_login)
-    elif print_index:     do_action("print_index",       user_login, repos, languages)
-    elif print_details:   do_action("print_details",     user_login, repos)
-    elif index_create:    do_action("create_index",      user_login, repos)
-    elif index_recreate:  do_action("recreate_index",    user_login, repos)
-    elif index_langs:     do_action("add_languages",     user_login, repos)
-    elif index_forks:     do_action("add_fork_info",     user_login, repos)
-    elif index_readmes:   do_action("add_readmes",       user_login, repos)
-    elif delete:          do_action("mark_deleted",      user_login, repos)
-    elif list_deleted:    do_action("list_deleted",      user_login, repos)
-    elif update:          do_action("update_entries",    user_login, repos)
-    elif update_internal: do_action("update_internal",   user_login)
+    if   summarize:       call("print_summary",     github_login)
+    elif print_ids:       call("print_indexed_ids", github_login, repos, languages)
+    elif print_index:     call("print_index",       github_login, repos, languages)
+    elif print_details:   call("print_details",     github_login, repos, languages)
+    elif index_create:    call("create_index",      github_login, repos)
+    elif index_recreate:  call("recreate_index",    github_login, repos)
+    elif index_langs:     call("add_languages",     github_login, repos)
+    elif index_forks:     call("add_fork_info",     github_login, repos)
+    elif index_readmes:   call("add_readmes",       github_login, repos, http_only)
+    elif delete:          call("mark_deleted",      github_login, repos)
+    elif list_deleted:    call("list_deleted",      github_login, repos)
+    elif update:          call("update_entries",    github_login, repos)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
 
-def do_action(action, user_login=None, targets=None, languages=None):
+def call(action, github_login=None, targets=None, languages=None):
     msg('Started at ', datetime.now())
     started = timer()
 
-    dbinterface = Database()
-    db = dbinterface.open()
+    casicsdb = CasicsDB()
+    github_db = casicsdb.open('github')
+    github_repos = github_db.repos
 
     # Do each host in turn.  (Currently only GitHub.)
 
     try:
-        indexer = GitHubIndexer(user_login)
+        indexer = GitHubIndexer(github_login, github_repos)
         method = getattr(indexer, action, None)
         if targets and languages:
-            method(db, targets, languages)
+            method(targets, languages)
         elif targets:
-            method(db, targets)
+            method(targets)
         elif languages:
-            method(db, None, languages)
+            method(None, languages)
         else:
-            method(db)
+            method()
     finally:
-        transaction.commit()
-        dbinterface.close()
+        casicsdb.close()
 
     # We're done.  Print some messages and exit.
 
@@ -153,10 +151,11 @@ def do_action(action, user_login=None, targets=None, languages=None):
 # Plac automatically adds a -h argument for help, so no need to do it here.
 
 main.__annotations__ = dict(
-    user_login      = ('use specified account login',                'option', 'a'),
+    github_login    = ('use specified GitHub account login',         'option', 'a'),
     index_create    = ('gather basic index data',                    'flag',   'c'),
     index_recreate  = ('re-gather basic index data',                 'flag',   'C'),
     file            = ('get repo names or identifiers from file',    'option', 'f'),
+    http_only       = ('use only HTTP, without resorting to API',    'flag'  , 'H'),
     languages       = ('limit printing to specific languages',       'option', 'L'),
     index_forks     = ('gather repository copy/fork status',         'flag',   'k'),
     index_langs     = ('gather programming languages',               'flag',   'l'),
@@ -166,7 +165,6 @@ main.__annotations__ = dict(
     print_index     = ('print summary of indexed repositories',      'flag',   's'),
     summarize       = ('summarize database statistics',              'flag',   'S'),
     update          = ('update specific entries by querying GitHub', 'flag',   'u'),
-    update_internal = ('update internal database tables',            'flag',   'U'),
     list_deleted    = ('list deleted entries',                       'flag',   'x'),
     delete          = ('mark specific entries as deleted',           'flag',   'X'),
     repos           = 'repository identifiers or names',
