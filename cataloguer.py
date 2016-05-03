@@ -77,11 +77,11 @@ from github_indexer import GitHubIndexer
 # Currently this only does GitHub, but extending this to handle other hosts
 # should hopefully be possible.
 
-def main(github_login=None, index_create=False, index_recreate=False,
-         file=None, languages=None, index_forks=False, index_langs=False,
-         index_readmes=False, print_details=False, print_index=False,
-         summarize=False, print_ids=False, update=False, update_internal=False,
-         list_deleted=False, delete=False, http_only=False, *repos):
+def main(acct=None, index_create=False, index_recreate=False,
+         file=None, http_only=False, index_forks=False, lang=None,
+         index_langs=False, print_details=False, print_ids=False,
+         index_readmes=False, print_index=False, summarize=False, update=False,
+         list_deleted=False, delete=False, *repos):
     '''Generate or print index of projects found in repositories.'''
 
     def convert(arg):
@@ -95,26 +95,26 @@ def main(github_login=None, index_create=False, index_recreate=False,
             if len(repos) > 0 and repos[0].isdigit():
                 repos = [int(x) for x in repos]
 
-    if languages:
-        languages = languages.split(',')
+    if lang:
+        lang = lang.split(',')
 
-    if   summarize:       call("print_summary",     github_login)
-    elif print_ids:       call("print_indexed_ids", github_login, repos, languages)
-    elif print_index:     call("print_index",       github_login, repos, languages)
-    elif print_details:   call("print_details",     github_login, repos, languages)
-    elif index_create:    call("create_index",      github_login, repos)
-    elif index_recreate:  call("recreate_index",    github_login, repos)
-    elif index_langs:     call("add_languages",     github_login, repos)
-    elif index_forks:     call("add_fork_info",     github_login, repos)
-    elif index_readmes:   call("add_readmes",       github_login, repos, http_only)
-    elif delete:          call("mark_deleted",      github_login, repos)
-    elif list_deleted:    call("list_deleted",      github_login, repos)
-    elif update:          call("update_entries",    github_login, repos)
+    if   summarize:       call("print_summary",     acct)
+    elif print_ids:       call("print_indexed_ids", acct, repos, lang)
+    elif print_index:     call("print_index",       acct, repos, lang)
+    elif print_details:   call("print_details",     acct, repos, lang)
+    elif index_create:    call("create_index",      acct, repos)
+    elif index_recreate:  call("recreate_index",    acct, repos)
+    elif index_langs:     call("add_languages",     acct, repos)
+    elif index_forks:     call("add_fork_info",     acct, repos)
+    elif index_readmes:   call("add_readmes",       acct, repos, http_only)
+    elif delete:          call("mark_deleted",      acct, repos)
+    elif list_deleted:    call("list_deleted",      acct, repos)
+    elif update:          call("update_entries",    acct, repos)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
 
-def call(action, github_login=None, targets=None, languages=None):
+def call(action, account=None, targets=None, languages=None):
     msg('Started at ', datetime.now())
     started = timer()
 
@@ -125,7 +125,7 @@ def call(action, github_login=None, targets=None, languages=None):
     # Do each host in turn.  (Currently only GitHub.)
 
     try:
-        indexer = GitHubIndexer(github_login, github_repos)
+        indexer = GitHubIndexer(account, github_repos)
         method = getattr(indexer, action, None)
         if targets and languages:
             method(targets, languages)
@@ -151,12 +151,12 @@ def call(action, github_login=None, targets=None, languages=None):
 # Plac automatically adds a -h argument for help, so no need to do it here.
 
 main.__annotations__ = dict(
-    github_login    = ('use specified GitHub account login',         'option', 'a'),
+    acct            = ('use specified GitHub account login',         'option', 'a'),
     index_create    = ('gather basic index data',                    'flag',   'c'),
     index_recreate  = ('re-gather basic index data',                 'flag',   'C'),
     file            = ('get repo names or identifiers from file',    'option', 'f'),
     http_only       = ('use only HTTP, without resorting to API',    'flag'  , 'H'),
-    languages       = ('limit printing to specific languages',       'option', 'L'),
+    lang            = ('limit printing to specific languages',       'option', 'L'),
     index_forks     = ('gather repository copy/fork status',         'flag',   'k'),
     index_langs     = ('gather programming languages',               'flag',   'l'),
     index_readmes   = ('gather README files',                        'flag',   'r'),
@@ -167,7 +167,7 @@ main.__annotations__ = dict(
     update          = ('update specific entries by querying GitHub', 'flag',   'u'),
     list_deleted    = ('list deleted entries',                       'flag',   'x'),
     delete          = ('mark specific entries as deleted',           'flag',   'X'),
-    repos           = 'repository identifiers or names',
+    repos           = 'one or more repository identifiers or names',
 )
 
 # Entry point

@@ -48,13 +48,9 @@ from utils import *
 # used for each repo.  So, for some things, this code uses the GitHub API
 # directly, via the Python httplib interface.
 
-
+
 # Miscellaneous general utilities.
 # .............................................................................
-
-def summarize(entry):
-    return '{}/{} (#{})'.format(entry['owner'], entry['name'], entry['_id'])
-
 
 def msg_notfound(thing):
     msg('*** "{}" not found ***'.format(thing))
@@ -68,11 +64,34 @@ def msg_bad(thing):
     else:
         msg('*** unrecognize type of thing: "{}" ***'.format(thing))
 
-
+
 # Utilities for working with our MongoDB contents.
 # .............................................................................
 
+def e_path(entry):
+    return entry['owner'] + '/' + entry['name']
 
+
+def e_summary(entry):
+    return '{} (#{})'.format(e_path(entry), entry['_id'])
+
+
+def e_languages(entry):
+    if not entry['languages']:
+        return []
+    elif entry['languages'] == -1:
+        return -1
+    elif isinstance(entry['languages'], list):
+        return [lang['name'] for lang in entry['languages']]
+    else:
+        # This shouldn't happen.
+        return entry['languages']
+
+
+def make_lang_dict(langs):
+    return [{'name': lang} for lang in langs]
+
+
 # Main class.
 # .............................................................................
 
@@ -222,18 +241,85 @@ class GitHubIndexer():
             sys.exit(1)
 
 
+    def get_last_seen_id(self):
+        last = self.db.find_one({'$query':{}, '$orderby':{'_id':-1}}, {})
+        return last['_id']
+
+
     def get_home_page(self, entry):
         r = requests.get(self.github_url(entry))
         return (r.status_code, r.text)
 
 
-    def loop(self, body_function, selector, targets=None):
+    def add_entry(self, entry):
+        self.db.insert_one(entry)
+
+
+    def update_entry(self, entry):
+        entry['refreshed'] = now_timestamp()
+        self.db.replace_one({'_id' : entry['_id']}, entry)
+
+
+    def update_field(self, entry, field, value):
+        entry[field] = value
+        now = now_timestamp()
+        entry['refreshed'] = now
+        self.db.update({'_id': entry['_id']},
+                       {'$set': {field: value, 'refreshed': now}})
+
+
+    def fork_info_from_github3(self, repo):
+        if repo.fork and repo.parent:
+            fork_info = repo.parent.owner.login + '/' + repo.parent.name
+        else:
+            fork_info = repo.fork
+
+
+    def update_entry_from_github3(self, entry, repo):
+        # Update existing entry.
+        entry['owner']          = repo.owner.login
+        entry['name']           = repo.name
+        entry['description']    = repo.description
+        entry['created']        = repo.created_at
+        entry['refreshed']      = now_timestamp()
+        entry['is_visible']     = not repo.private
+        entry['is_deleted']     = False
+        entry['is_fork']        = repo.fork
+        entry['fork_of']        = self.fork_info_from_github3(repo)
+        entry['default_branch'] = repo.default_branch
+        entry['archive_url']    = str(repo.archive_urlt)
+        self.update_entry(entry)
+
+
+    def add_entry_from_github3(self, repo):
+        # 'repo' is a github3 object.
+        entry = self.db.find_one({'_id' : repo.id})
+        if entry == None:
+            # Create a new entry.
+            entry = repo_entry(id=repo.id,
+                               owner=repo.owner.login,
+                               name=repo.name,
+                               description=repo.description,
+                               created=repo.created_at,
+                               refreshed=now_timestamp(),
+                               is_visible=not repo.private,
+                               is_deleted=False,
+                               is_fork=repo.fork,
+                               fork_of=self.fork_info_from_github3(repo),
+                               default_branch=repo.default_branch,
+                               archive_url=str(repo.archive_urlt))
+            self.add_entry(entry)
+        else:
+            self.update_entry_from_github3(entry, repo)
+
+
+    def loop(self, iterator, body_function, selector, targets=None):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
         count = 0
         failures = 0
         start = time()
         # By default, only consider those entries without language info.
-        for entry in self.entry_list(targets or selector):
+        for entry in iterator(targets or selector):
             if self.api_calls_left() < 1:
                 self.wait_for_reset()
                 failures = 0
@@ -244,6 +330,9 @@ class GitHubIndexer():
                 try:
                     body_function(entry)
                     failures = 0
+                except StopIteration:
+                    msg('Iterator reports it is done')
+                    break
                 except github3.GitHubError as err:
                     # Occasionally an error even when not over the rate limit.
                     if err.code == 403:
@@ -255,12 +344,12 @@ class GitHubIndexer():
                             calls_left = self.api_calls_left()
                             retry = True
                         else:
-                            msg('GitHub code 403 for {}'.format(summarize(entry)))
+                            msg('GitHub code 403 for {}'.format(e_summary(entry)))
                             self.update_field(entry, 'is_visible', False)
                             retry = False
                             failures += 1
                     elif err.code == 451:
-                        msg('GitHub code 451 (blocked) for {}'.format(summarize(entry)))
+                        msg('GitHub code 451 (blocked) for {}'.format(e_summary(entry)))
                         self.update_field(entry, 'is_visible', False)
                         retry = False
                     else:
@@ -268,13 +357,8 @@ class GitHubIndexer():
                         failures += 1
                         # Might be a network or other transient error.
                         retry = True
-                except EnumerationValueError as err:
-                    # Encountered a language string that's not in our enum.
-                    # Print a message and go on.
-                    msg('Encountered unrecognized language: {}'.format(err))
-                    retry = False
                 except Exception as err:
-                    msg('Exception for {}: {}'.format(summarize(entry), err))
+                    msg('Exception for {}: {}'.format(e_summary(entry), err))
                     failures += 1
                     # Might be a network or other transient error.
                     retry = True
@@ -289,19 +373,6 @@ class GitHubIndexer():
 
         msg('')
         msg('Done.')
-
-
-    def update_entry(self, entry):
-        entry['refreshed'] = now_timestamp()
-        self.db.replace_one({'_id' : entry['_id']}, entry)
-
-
-    def update_field(self, entry, field, value):
-        entry[field] = value
-        now = now_timestamp()
-        entry['refreshed'] = now
-        self.db.update({'_id': entry['_id']},
-                       {'$set': {field: value, 'refreshed': now}})
 
 
     def ensure_id(self, item):
@@ -335,37 +406,17 @@ class GitHubIndexer():
                 # Skip it unless the caller explicitly wants it.
                 only_return.append({'_id': 0})
         if isinstance(targets, dict):
-            if only_return:
-                return self.db.find(targets, only_return)
-            else:
-                return self.db.find(targets)
+            return self.db.find(targets, only_return)
         elif isinstance(targets, list):
             id_list = [self.ensure_id(x) for x in targets]
-            if only_return:
-                return filter(None, [self.db.find_one({'_id': id}, only_return)
-                                     for id in id_list])
-            else:
-                return filter(None, [self.db.find_one({'_id': id})
-                                     for id in id_list])
+            return filter(None, [self.db.find_one({'_id': id}, only_return)
+                                 for id in id_list])
+        elif isinstance(targets, int):
+            # Single target.
+            return self.db.find({'_id' : targets}, only_return)
         else:
             # Empty targets, so match against all entries.
-            if only_return:
-                return self.db.find({}, only_return)
-            else:
-                return self.db.find()
-
-
-    def language_names(self, entry):
-        if not entry['languages']:
-            return []
-        elif entry['languages'] == -1:
-            return -1
-        else:
-            return [lang['name'] for lang in entry['languages']]
-
-
-    def language_list(self, langs):
-        return [{'name': lang} for lang in langs]
+            return self.db.find({}, only_return)
 
 
     def language_query(self, lang_filter):
@@ -389,7 +440,7 @@ class GitHubIndexer():
                 print(seen, '...', end='', flush=True)
             if not entry['languages']:
                 continue
-            for lang in self.language_names(entry):
+            for lang in e_languages(entry):
                 totals[lang] = totals[lang] + 1 if lang in totals else 1
         seen = humanize.intcomma(seen)
         msg('Language usage counts for {} entries:'.format())
@@ -408,16 +459,16 @@ class GitHubIndexer():
         msg("The following entries have 'is_deleted' = True:")
         for entry in self.entry_list(targets or {'is_deleted': True},
                                      only_return={'_id', 'owner', 'name'}):
-            msg(summarize(entry))
+            msg(e_summary(entry))
 
 
     def print_summary(self):
         '''Print an overall summary of the database.'''
         total = humanize.intcomma(self.db.count())
         msg('Database has {} total GitHub entries.'.format(total))
-        last_seen = self.db.find_one({'$query':{}, '$orderby':{'_id':-1}})
+        last_seen = self.get_last_seen_id()
         if last_seen:
-            msg('Last seen GitHub id: {}.'.format(last_seen['_id']))
+            msg('Last seen GitHub id: {}.'.format(last_seen_id))
         else:
             msg('*** no entries ***')
             return
@@ -460,7 +511,7 @@ class GitHubIndexer():
             else:
                 msg('DESCRIPTION:')
             if entry['languages']:
-                msg('LANGUAGES:'.ljust(width), ', '.join(self.language_names(entry)))
+                msg('LANGUAGES:'.ljust(width), ', '.join(e_languages(entry)))
             else:
                 msg('LANGUAGES:')
             msg('CREATED:'.ljust(width), timestamp_str(entry['created']))
@@ -486,11 +537,14 @@ class GitHubIndexer():
             msg('Limiting output to entries having languages', lang_filter)
             filter = self.language_query(lang_filter)
         fields = ['owner', 'name', '_id', 'languages']
+        msg('-'*79)
         for entry in self.entry_list(filter or targets, only_return=fields):
-            langs = self.language_names(entry)
+            langs = e_languages(entry)
+            if langs != -1:
+                langs = ' '.join(langs) if langs else ''
             msg('{}/{} (#{}), langs: {}'.format(
-                entry['owner'], entry['name'], entry['_id'],
-                ' '.join(langs) if langs else ''))
+                entry['owner'], entry['name'], entry['_id'], langs))
+        msg('-'*79)
 
 
     def extract_languages_from_html(self, html):
@@ -579,21 +633,13 @@ class GitHubIndexer():
 
     def get_readme(self, entry, http_only=False):
         # First try to get it via direct HTTP access, to save on API calls.
-        base_url = 'https://raw.githubusercontent.com/' + entry['owner'] + '/' + entry['name']
-        readme_1 = base_url + '/master/README.md'
-        readme_2 = base_url + '/master/README.rst'
-        readme_3 = base_url + '/master/README'
-        readme_4 = base_url + '/master/README.txt'
-        readme_5 = base_url + '/master/README.rdoc'
-        readme_6 = base_url + '/master/README.markdown'
-        readme_7 = base_url + '/master/README.textile'
-        for alternative in [readme_1, readme_2, readme_3, readme_4, readme_5,
-                            readme_6, readme_7]:
+        base_url = 'https://raw.githubusercontent.com/' + e_path(entry)
+        exts = ['.md', '.rst', '', '.txt', '.rdoc', '.markdown', '.textile']
+        for ext in exts:
+            alternative = base_url + '/master/README' + ext
             r = requests.get(alternative)
             if r.status_code == 200:
                 return ('http', r.text)
-            elif r.status_code < 300:
-                import ipdb; ipdb.set_trace()
             sleep(0.1) # Don't hit their servers too hard.
 
         if http_only:
@@ -604,8 +650,7 @@ class GitHubIndexer():
         # https://developer.github.com/v3/repos/contents/
         # Using github3.py would need 2 api calls per repo to get this info.
         # Here we do direct access to bring it to 1 api call.
-        url = 'https://api.github.com/repos/{}/{}/readme'.format(
-            entry['owner'], entry['name'])
+        url = 'https://api.github.com/repos/{}/readme'.format(e_path(entry))
         return ('api', self.direct_api_call(url))
 
 
@@ -638,7 +683,7 @@ class GitHubIndexer():
                     # Nope, it's gone.
                     self.update_field(entry, 'is_deleted', True)
                     self.update_field(entry, 'is_visible', False)
-                    msg('*** {} no longer exists'.format(summarize(entry)))
+                    msg('*** {} no longer exists'.format(e_summary(entry)))
                     found = True
                 elif entry['owner'] != repo.owner.login \
                      or entry['name'] != repo.name:
@@ -648,21 +693,21 @@ class GitHubIndexer():
                     # Try again with the info returned by github3.
                     (found, method, langs, fork, desc) = self.get_languages(entry)
                 else:
-                    msg('*** {} appears to be private'.format(summarize(entry)))
+                    msg('*** {} appears to be private'.format(e_summary(entry)))
                     self.update_field(entry, 'is_visible', False)
                     return
             if not found:
                 # 2nd attempt failed. Bail.
-                msg('*** Failed to get info about {}'.format(summarize(entry)))
+                msg('*** Failed to get info about {}'.format(e_summary(entry)))
                 return
             if not entry['is_deleted']:
                 t2 = time()
                 fork_info = ', a fork of {},'.format(fork) if fork else ''
                 lang_info = len(langs) if langs else 'no languages'
                 msg('{}{} in {:.2f}s via {}, {}'.format(
-                    summarize(entry), fork_info, (t2 - t1), method, lang_info))
+                    e_summary(entry), fork_info, (t2 - t1), method, lang_info))
                 if langs:
-                    self.update_field(entry, 'languages', self.language_list(langs))
+                    self.update_field(entry, 'languages', make_lang_dict(langs))
                 else:
                     self.update_field(entry, 'languages', -1)
                 if desc:
@@ -692,7 +737,7 @@ class GitHubIndexer():
                     # Nope, it's gone.
                     self.update_field(entry, 'is_deleted', True)
                     self.update_field(entry, 'is_visible', False)
-                    msg('*** {} no longer exists'.format(summarize(entry)))
+                    msg('*** {} no longer exists'.format(e_summary(entry)))
                     return
                 elif entry['owner'] != repo.owner.login \
                      or entry['name'] != repo.name:
@@ -708,13 +753,13 @@ class GitHubIndexer():
             if readme and not isinstance(readme, int):
                 t2 = time()
                 msg('{} {} in {:.2f}s via {}'.format(
-                    summarize(entry), len(readme), (t2 - t1), method))
+                    e_summary(entry), len(readme), (t2 - t1), method))
                 self.update_field(entry, 'readme', readme)
             else:
                 # If GitHub doesn't return a README file, we need to
                 # record something to indicate that we already tried.
                 # The something can't be '', or None, or 0.  We use -1.
-                msg('No readme for {}'.format(summarize(entry)))
+                msg('No readme for {}'.format(e_summary(entry)))
                 self.update_field(entry, 'readme', -1)
             self.update_field(entry, 'is_visible', True)
 
@@ -724,7 +769,40 @@ class GitHubIndexer():
         self.loop(body_function, selected_repos, targets)
 
 
+    def create_index(self, targets=None, continuation=True):
+        def body_function(entry):
+            t1 = time()
+            if isinstance(entry, github3.repos.repo.Repository):
+                self.add_entry_from_github3(entry)
+                msg('{}/{} (#{}) added'.format(entry.owner.login, entry.name,
+                                               entry.id))
+            else:
+                # We have an entry already, which means we're doing an update.
+                repo = self.github().repository(entry['owner'], entry['name'])
+                if repo:
+                    self.update_entry_from_github3(entry, repo)
+                    msg('{} updated'.format(e_summary(entry)))
+                else:
+                    msg('*** {} no longer exists'.format(e_summary(entry)))
+                    self.update_field(entry, 'is_visible', False)
 
+        total = humanize.intcomma(self.db.count())
+        msg('Database has {} total GitHub entries.'.format(total))
+        if targets:
+            repo_iterator = self.entry_list
+        else:
+            if continuation:
+                last_seen = self.get_last_seen_id()
+                if last_seen:
+                    msg('Continuing from highest-known id {}'.format(last_seen))
+                else:
+                    msg('No record of the last-seen repo.  Starting from the top.')
+                    last_seen = -1
+            else:
+                last_seen = -1
+            repo_iterator = self.get_repo_iterator
+        # Set up selection criteria and start the loop
+        self.loop(repo_iterator, body_function, None, targets or last_seen)
 
 
 
