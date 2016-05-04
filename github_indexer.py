@@ -319,6 +319,7 @@ class GitHubIndexer():
         failures = 0
         start = time()
         # By default, only consider those entries without language info.
+        import ipdb; ipdb.set_trace()
         for entry in iterator(targets or selector):
             if self.api_calls_left() < 1:
                 self.wait_for_reset()
@@ -722,7 +723,7 @@ class GitHubIndexer():
         # Set up selection criteria and start the loop
         selected_repos = {'languages': {"$eq" : []}, 'is_deleted': False,
                           'is_visible': {"$ne" : False}}
-        self.loop(body_function, selected_repos, targets)
+        self.loop(self.entry_list, selected_repos, targets)
 
 
     def add_readmes(self, targets=None, http_only=False):
@@ -766,7 +767,7 @@ class GitHubIndexer():
         # Set up selection criteria and start the loop
         selected_repos = {'readme': {"$eq" : ''}, 'is_deleted': False,
                           'is_visible': {"$ne" : False}}
-        self.loop(body_function, selected_repos, targets)
+        self.loop(self.entry_list, body_function, selected_repos, targets)
 
 
     def create_index(self, targets=None, continuation=True):
