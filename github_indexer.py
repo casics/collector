@@ -723,7 +723,7 @@ class GitHubIndexer():
         selected_repos = {'languages': {"$eq" : []}, 'is_deleted': False,
                           'is_visible': {"$ne" : False}}
         # And let's do it.
-        self.loop(self.entry_list, selected_repos, targets)
+        self.loop(self.entry_list, body_function, selected_repos, targets)
 
 
     def add_readmes(self, targets=None, http_only=False):
