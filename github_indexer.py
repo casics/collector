@@ -456,10 +456,12 @@ class GitHubIndexer():
 
 
     def list_deleted(self, targets=None):
+        msg('-'*79)
         msg("The following entries have 'is_deleted' = True:")
         for entry in self.entry_list(targets or {'is_deleted': True},
                                      only_return={'_id', 'owner', 'name'}):
             msg(e_summary(entry))
+        msg('-'*79)
 
 
     def print_summary(self):
