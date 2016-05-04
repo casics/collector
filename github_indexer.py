@@ -319,7 +319,6 @@ class GitHubIndexer():
         failures = 0
         start = time()
         # By default, only consider those entries without language info.
-        import ipdb; ipdb.set_trace()
         for entry in iterator(targets or selector):
             if self.api_calls_left() < 1:
                 self.wait_for_reset()
