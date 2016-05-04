@@ -719,9 +719,10 @@ class GitHubIndexer():
                     self.update_field(entry, 'fork_of', fork)
                 self.update_field(entry, 'is_visible', True)
 
-        # Set up selection criteria and start the loop
+        # Set up deafult selection criteria when not using 'targets'.
         selected_repos = {'languages': {"$eq" : []}, 'is_deleted': False,
                           'is_visible': {"$ne" : False}}
+        # And let's do it.
         self.loop(self.entry_list, selected_repos, targets)
 
 
@@ -763,9 +764,10 @@ class GitHubIndexer():
                 self.update_field(entry, 'readme', -1)
             self.update_field(entry, 'is_visible', True)
 
-        # Set up selection criteria and start the loop
+        # Set up deafult selection criteria when not using 'targets'.
         selected_repos = {'readme': {"$eq" : ''}, 'is_deleted': False,
                           'is_visible': {"$ne" : False}}
+        # And let's do it.
         self.loop(self.entry_list, body_function, selected_repos, targets)
 
 
