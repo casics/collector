@@ -372,6 +372,7 @@ class GitHubIndexer():
 
     def entry_list(self, targets=None, criteria=None):
         # Returns a list of mongodb entries.
+        bsize=1000                      # Trying to deal w/ cursor timeouts.
         if criteria:
             # Restructure the list of fields into the format expected by mongo.
             criteria = {x:1 for x in criteria}
@@ -381,17 +382,17 @@ class GitHubIndexer():
                 criteria.append({'_id': 0})
         if isinstance(targets, dict):
             # Caller provided a query string, so use it directly.
-            return self.db.find(targets, criteria)
+            return self.db.find(targets, criteria, batch_size=bsize)
         elif isinstance(targets, list):
             # Caller provided a list of id's or repo names.
             ids = [self.ensure_id(x) for x in targets]
-            return self.db.find({'_id': {'$in': ids}}, criteria)
+            return self.db.find({'_id': {'$in': ids}}, criteria, batch_size=bsize)
         elif isinstance(targets, int):
             # Single target, assumed to be a repo identifier.
-            return self.db.find({'_id' : targets}, criteria)
+            return self.db.find({'_id' : targets}, criteria, batch_size=bsize)
         else:
             # Empty targets, so match against all entries.
-            return self.db.find({}, criteria)
+            return self.db.find({}, criteria, batch_size=bsize)
 
 
     def language_query(self, lang_filter):
