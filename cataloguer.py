@@ -114,18 +114,22 @@ def main(acct=None, index_create=False, index_recreate=False,
         raise SystemExit('No action specified. Use -h for help.')
 
 
-def call(action, account=None, targets=None, languages=None):
+def call(action, github_acct=None, targets=None, languages=None):
     msg('Started at ', datetime.now())
     started = timer()
 
     casicsdb = CasicsDB()
-    github_db = casicsdb.open('github')
-    github_repos = github_db.repos
 
-    # Do each host in turn.  (Currently only GitHub.)
-
+    # Do each host in turn.  (Currently we handle only GitHub.)
     try:
-        indexer = GitHubIndexer(account, github_repos)
+        # Find out how we log into the hosting service.
+        (github_login, github_password) = github_info('github', github_acct)
+        # Open our Mongo database.
+        github_db = casicsdb.open('github')
+        # Initialize our worker object.
+        indexer = GitHubIndexer(github_login, github_password, github_db)
+
+        # Figure out what action we're supposed to perform, and do it.
         method = getattr(indexer, action, None)
         if targets and languages:
             method(targets, languages)
@@ -139,10 +143,45 @@ def call(action, account=None, targets=None, languages=None):
         casicsdb.close()
 
     # We're done.  Print some messages and exit.
-
     stopped = timer()
     msg('Stopped at {}'.format(datetime.now()))
     msg('Time elapsed: {}'.format(stopped - started))
+
+
+def github_info(hosting_service, service_account):
+    cfg = Config('mongodb.ini')
+    section = hosting_service
+    user_login = None
+    user_password = None
+    try:
+        if service_account:
+            for name, value in cfg.items(section):
+                if name.startswith('login') and value == service_account:
+                    user_login = service_account
+                    index = name[len('login'):]
+                    if index:
+                        user_password = cfg.get(section, 'password' + index)
+                    else:
+                        # login entry doesn't have an index number.
+                        # Might be a config file in the old format.
+                        user_password = value
+                    break
+            # If we get here, we failed to find the requested login.
+            msg('Cannot find "{}" in section {} of config.ini'.format(
+                service_account, section))
+        else:
+            try:
+                user_login = cfg.get(section, 'login1')
+                user_password = cfg.get(section, 'password1')
+            except:
+                user_login = cfg.get(section, 'login')
+                user_password = cfg.get(section, 'password')
+    except Exception as err:
+        msg(err)
+        text = 'Failed to read "login" and/or "password" for {}'.format(
+            section)
+        raise SystemExit(text)
+    return (user_login, user_password)
 
 
 # Plac annotations for main function arguments
