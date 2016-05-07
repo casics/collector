@@ -106,7 +106,7 @@ def main(acct=None, index_create=False, index_recreate=False,
     elif index_recreate:  call("recreate_index",    acct, repos)
     elif index_langs:     call("add_languages",     acct, repos)
     elif index_forks:     call("add_fork_info",     acct, repos)
-    elif index_readmes:   call("add_readmes",       acct, repos, http_only)
+    elif index_readmes:   call("add_readmes",       acct, repos, lang, http_only)
     elif delete:          call("mark_deleted",      acct, repos)
     elif list_deleted:    call("list_deleted",      acct, repos)
     elif update:          call("update_entries",    acct, repos)
@@ -114,7 +114,7 @@ def main(acct=None, index_create=False, index_recreate=False,
         raise SystemExit('No action specified. Use -h for help.')
 
 
-def call(action, github_acct=None, targets=None, languages=None):
+def call(action, login=None, targets=None, languages=None, http_only=False):
     msg('Started at ', datetime.now())
     started = timer()
 
@@ -123,7 +123,7 @@ def call(action, github_acct=None, targets=None, languages=None):
     # Do each host in turn.  (Currently we handle only GitHub.)
     try:
         # Find out how we log into the hosting service.
-        (github_login, github_password) = github_info('github', github_acct)
+        (github_login, github_password) = github_info('github', login)
         # Open our Mongo database.
         github_db = casicsdb.open('github')
         # Initialize our worker object.
@@ -131,7 +131,9 @@ def call(action, github_acct=None, targets=None, languages=None):
 
         # Figure out what action we're supposed to perform, and do it.
         method = getattr(indexer, action, None)
-        if targets and languages:
+        if targets and languages and http_only:
+            method(targets, languages, http_only)
+        elif targets and languages:
             method(targets, languages)
         elif targets:
             method(targets)

@@ -705,7 +705,7 @@ class GitHubIndexer():
         self.loop(self.entry_list, body_function, selected_repos, targets)
 
 
-    def add_readmes(self, targets=None, http_only=False):
+    def add_readmes(self, targets=None, languages=None, http_only=False):
         def body_function(entry):
             t1 = time()
             (method, readme) = self.get_readme(entry, http_only)
