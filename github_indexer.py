@@ -98,38 +98,10 @@ def make_lang_dict(langs):
 class GitHubIndexer():
     _max_failures   = 10
 
-    def __init__(self, user_login=None, db=None):
-        self.db = db
-        cfg = Config()
-        section = 'GitHub'
-        try:
-            if user_login:
-                for name, value in cfg.items(section):
-                    if name.startswith('login') and value == user_login:
-                        self._login = user_login
-                        index = name[len('login'):]
-                        if index:
-                            self._password = cfg.get(section, 'password' + index)
-                        else:
-                            # login entry doesn't have an index number.
-                            # Might be a config file in the old format.
-                            self._password = value
-                        break
-                # If we get here, we failed to find the requested login.
-                msg('Cannot find "{}" in section {} of config.ini'.format(
-                    user_login, section))
-            else:
-                try:
-                    self._login = cfg.get(section, 'login1')
-                    self._password = cfg.get(section, 'password1')
-                except:
-                    self._login = cfg.get(section, 'login')
-                    self._password = cfg.get(section, 'password')
-        except Exception as err:
-            msg(err)
-            text = 'Failed to read "login" and/or "password" for {}'.format(
-                section)
-            raise SystemExit(text)
+    def __init__(self, github_login=None, github_password=None, github_db=None):
+        self.db        = github_db.repos
+        self._login    = github_login
+        self._password = github_password
 
 
     def github(self):
@@ -398,25 +370,28 @@ class GitHubIndexer():
         return None
 
 
-    def entry_list(self, targets=None, only_return=None):
-        if only_return:
-            only_return = {x:1 for x in only_return}
-            if '_id' not in only_return:
+    def entry_list(self, targets=None, criteria=None):
+        # Returns a list of mongodb entries.
+        if criteria:
+            # Restructure the list of fields into the format expected by mongo.
+            criteria = {x:1 for x in criteria}
+            if '_id' not in criteria:
                 # By default, Mongodb will return _id even if not requested.
                 # Skip it unless the caller explicitly wants it.
-                only_return.append({'_id': 0})
+                criteria.append({'_id': 0})
         if isinstance(targets, dict):
-            return self.db.find(targets, only_return)
+            # Caller provided a query string, so use it directly.
+            return self.db.find(targets, criteria)
         elif isinstance(targets, list):
-            id_list = [self.ensure_id(x) for x in targets]
-            return filter(None, [self.db.find_one({'_id': id}, only_return)
-                                 for id in id_list])
+            # Caller provided a list of id's or repo names.
+            ids = [self.ensure_id(x) for x in targets]
+            return self.db.find({'_id': {'$in': ids}}, criteria)
         elif isinstance(targets, int):
-            # Single target.
-            return self.db.find({'_id' : targets}, only_return)
+            # Single target, assumed to be a repo identifier.
+            return self.db.find({'_id' : targets}, criteria)
         else:
             # Empty targets, so match against all entries.
-            return self.db.find({}, only_return)
+            return self.db.find({}, criteria)
 
 
     def language_query(self, lang_filter):
