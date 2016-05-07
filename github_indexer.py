@@ -127,19 +127,24 @@ class GitHubIndexer():
 
     def api_calls_left(self):
         '''Returns an integer.'''
-        try:
-            # response = self.direct_api_call('/rate_limit')
-            # if response and response != 404:
-            #     content = json.loads(response)
-            #     return content['rate']['remaining']
-            # Backup approach if we fail:
+        # We call this more than once:
+        def calls_left():
             rate_limit = self.github().rate_limit()
             return rate_limit['resources']['core']['remaining']
+
+        try:
+            return calls_left()
         except Exception as err:
             msg('Got exception asking about rate limit: {}'.format(err))
-            # Treat it as no time left, which in the rest of the code should
-            # cause a pause and a retry later.
-            return 0
+            msg('Sleeping for 1 minute and trying again.')
+            sleep(60)
+            msg('Trying again.')
+            try:
+                return calls_left()
+            except Exception as err:
+                msg('Got another exception asking about rate limit: {}'.format(err))
+                # Treat it as no time left.  Caller should pause for longer.
+                return 0
 
 
     def api_reset_time(self):
