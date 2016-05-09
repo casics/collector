@@ -345,10 +345,12 @@ class GitHubIndexer():
                         # Might be a network or other transient error.
                         retry = True
                 except Exception as err:
-                    msg('Exception for {}: {}'.format(e_summary(entry), err))
+                    msg('Exception for {} -- skipping it -- {}'.format(
+                        e_summary(entry), err))
+                    # Something unexpected.  Don't retry this entry, but count
+                    # this failure in case we're up against a roadblock.
                     failures += 1
-                    # Might be a network or other transient error.
-                    retry = True
+                    retry = False
 
             if failures >= self._max_failures:
                 msg('Stopping because of too many consecutive failures')
