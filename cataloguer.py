@@ -131,7 +131,6 @@ def call(action, login=None, targets=None, languages=None, http_only=False):
 
         # Figure out what action we're supposed to perform, and do it.
         method = getattr(indexer, action, None)
-        import ipdb; ipdb.set_trace()
         if targets and languages:
             if http_only:
                 method(targets, languages, http_only)
