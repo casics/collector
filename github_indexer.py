@@ -20,6 +20,7 @@ import requests
 import urllib
 import github3
 import humanize
+import socket
 from base64 import b64encode
 from datetime import datetime
 from time import time, sleep
@@ -172,7 +173,16 @@ class GitHubIndexer():
             'Authorization': 'Basic ' + b64encode(bytes(auth, 'ascii')).decode('ascii'),
             'Accept': 'application/vnd.github.v3.raw',
         }
-        conn = http.client.HTTPSConnection("api.github.com")
+        try:
+            conn = http.client.HTTPSConnection("api.github.com", timeout=15)
+        except:
+            # If we fail (maybe due to a timeout), try it one more time.
+            try:
+                sleep(1)
+                conn = http.client.HTTPSConnection("api.github.com", timeout=15)
+            except:
+                # Bummer.
+                return None
         conn.request("GET", url, {}, headers)
         response = conn.getresponse()
         if response.status == 200:
