@@ -180,8 +180,8 @@ class GitHubIndexer():
             try:
                 sleep(1)
                 conn = http.client.HTTPSConnection("api.github.com", timeout=15)
-            except:
-                # Bummer.
+            except Exception:
+                msg('Failed direct api call: {}'.format(err))
                 return None
         conn.request("GET", url, {}, headers)
         response = conn.getresponse()
