@@ -147,7 +147,10 @@ def call(action, login=None, targets=None, languages=None, http_only=False):
             else:
                 method(None, languages)
         else:
-            method()
+            if http_only:
+                method(None, None, http_only)
+            else:
+                method()
     finally:
         casicsdb.close()
 
