@@ -629,14 +629,34 @@ class GitHubIndexer():
 
     def get_readme(self, entry, http_only=False):
         # First try to get it via direct HTTP access, to save on API calls.
+        # If that fails and http_only != False, we resport to API calls.
+
+        # The direct HTTP access approach simply tries different alternatives
+        # one after the other.  The order is based on the popularity of
+        # README file extensions a determined by the following searches on
+        # GitHub (updated on 2016-05-09):
+        #
+        # filename:README                             = 75,305,118
+        # filename:README.md extension:md             = 58,495,885
+        # filename:README.txt extension:txt           =  4,269,189
+        # filename:README.markdown extension:markdown =  2,618,347
+        # filename:README.rdoc extension:rdoc         =    627,375
+        # filename:README.html                        =    337,131  **
+        # filename:README.rst extension:rst           =    244,631
+        # filename:README.textile extension:textile   =     49,468
+        #
+        # ** (this doesn't appear to be common for top-level readme's.)  I
+        # decided to pick the top 6.  Another note: using concurrency here
+        # doesn't speed things up.  The approach here is to return as soon as
+        # we find a result, which is faster than anything else.
+
+        exts = ['', '.md', '.txt', '.markdown', '.rdoc', '.rst']
         base_url = 'https://raw.githubusercontent.com/' + e_path(entry)
-        exts = ['.md', '.rst', '', '.txt', '.rdoc', '.markdown', '.textile']
         for ext in exts:
             alternative = base_url + '/master/README' + ext
             r = requests.get(alternative)
             if r.status_code == 200:
                 return ('http', r.text)
-            sleep(0.1) # Don't hit their servers too hard.
 
         if http_only:
             return ('http', None)
@@ -1496,3 +1516,17 @@ class GitHubIndexer():
 
     #     transaction.commit()
     #     msg('Done.')
+
+
+# Tried this concurrent approach but it's slower.
+
+
+# def get_file_http(path):
+#     # Needed as top-level function so that concurrent processes can be used.
+#     r = requests.get(path)
+#     return r.text if r.status_code == 200 else None
+
+#         pool = Pool(processes=2)
+#         files = list(filter(None, pool.map(get_file_http, urls)))
+#         if files:
+#             return ('http', files[0])
