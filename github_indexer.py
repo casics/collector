@@ -166,6 +166,39 @@ class GitHubIndexer():
         msg('Continuing')
 
 
+    def repo_via_api(self, owner, name):
+        failures = 0
+        retry = True
+        while retry and failures < self._max_failures:
+            # Don't retry unless the problem may be transient.
+            retry = False
+            try:
+                return self.github().repository(owner, name)
+            except github3.GitHubError as err:
+                if err.code == 403:
+                    if self.api_calls_left() < 1:
+                        self.wait_for_reset()
+                        failures += 1
+                        retry = True
+                    else:
+                        msg('GitHb code 403 for {}/{}'.format(owner, name))
+                        break
+                elif err.code == 451:
+                    msg('GitHub code 451 (blocked) for {}/{}'.format(owner, name))
+                    break
+                else:
+                    msg('github3 generated an exception: {0}'.format(err))
+                    failures += 1
+                    # Might be a network or other transient error. Try again.
+                    sleep(0.5)
+                    retry = True
+            except Exception as err:
+                msg('Exception for {}/{}: {}'.format(owner, name, err))
+                # Something even more unexpected.
+                break
+        return None
+
+
     def direct_api_call(self, url):
         auth = '{0}:{1}'.format(self._login, self._password)
         headers = {
@@ -202,8 +235,33 @@ class GitHubIndexer():
             return response.status
 
 
-    def github_url(self, entry):
-        return 'http://github.com/' + entry['owner'] + '/' + entry['name']
+    def github_url_path(self, entry, owner=None, name=None):
+        if not owner:
+            owner = entry['owner']
+        if not name:
+            name  = entry['name']
+        return '/' + owner + '/' + name
+
+
+    def github_url(self, entry, owner=None, name=None):
+        return 'http://github.com' + self.github_url_path(entry, owner, name)
+
+
+    def github_url_exists(self, entry, owner=None, name=None):
+        url_path = self.github_url_path(entry, owner, name)
+        try:
+            conn = http.client.HTTPSConnection('github.com', timeout=15)
+        except:
+            # If we fail (maybe due to a timeout), try it one more time.
+            try:
+                sleep(1)
+                conn = http.client.HTTPSConnection('github.com', timeout=15)
+            except Exception:
+                msg('Failed url check for {}: {}'.format(url_path, err))
+                return None
+        conn.request('HEAD', url_path)
+        resp = conn.getresponse()
+        return resp.status < 400
 
 
     def get_github_iterator(self, last_seen=None):
@@ -233,8 +291,8 @@ class GitHubIndexer():
         return last['_id']
 
 
-    def get_home_page(self, entry):
-        r = requests.get(self.github_url(entry))
+    def get_home_page(self, entry, owner=None, name=None):
+        r = requests.get(self.github_url(entry, owner, name))
         return (r.status_code, r.text)
 
 
@@ -435,7 +493,13 @@ class GitHubIndexer():
             elif item.find('/') > 1:
                 owner = item[:item.find('/')]
                 name  = item[item.find('/') + 1:]
-                repo = self.github().repository(owner, name)
+
+                # FIXME
+                if self.github_url_exists(None, owner, name):
+                    repo = self.repo_via_api(owner, name)
+                else:
+                    msg('*** No home page for {}/{} -- skipping'.format(owner, name))
+                    continue
             else:
                 msg('*** Skipping uninterpretable "{}"'.format(item))
                 continue
