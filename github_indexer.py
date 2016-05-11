@@ -264,10 +264,14 @@ class GitHubIndexer():
 
     def update_entry_from_github3(self, entry, repo):
         # Update existing entry.
+        # This purposefully does not change 'languages' and 'readme', because
+        # they are not in the github3 structure and if we're updating an
+        # existing entry in our database, we don't want to destroy those
+        # fields if we have them.
         entry['owner']          = repo.owner.login
         entry['name']           = repo.name
         entry['description']    = repo.description
-        entry['created']        = repo.created_at
+        entry['created']        = canonicalize_timestamp(repo.created_at)
         entry['refreshed']      = now_timestamp()
         entry['is_visible']     = not repo.private
         entry['is_deleted']     = False
@@ -278,16 +282,20 @@ class GitHubIndexer():
         self.update_entry(entry)
 
 
-    def add_entry_from_github3(self, repo):
-        # 'repo' is a github3 object.
+    def add_entry_from_github3(self, repo, overwrite=False):
+        # 'repo' is a github3 object.  Returns True if it's a new entry.
         entry = self.db.find_one({'_id' : repo.id})
         if entry == None:
             # Create a new entry.
+            # This purposefully does not change 'languages' and 'readme',
+            # because they are not in the github3 structure and if we're
+            # updating an existing entry in our database, we don't want to
+            # destroy those fields if we have them.
             entry = repo_entry(id=repo.id,
                                owner=repo.owner.login,
                                name=repo.name,
                                description=repo.description,
-                               created=repo.created_at,
+                               created=canonicalize_timestamp(repo.created_at),
                                refreshed=now_timestamp(),
                                is_visible=not repo.private,
                                is_deleted=False,
@@ -296,8 +304,12 @@ class GitHubIndexer():
                                default_branch=repo.default_branch,
                                archive_url=str(repo.archive_urlt))
             self.add_entry(entry)
-        else:
+            return (True, entry)
+        elif overwrite:
             self.update_entry_from_github3(entry, repo)
+            return (False, entry)
+        else:
+            return (False, entry)
 
 
     def loop(self, iterator, body_function, selector, targets=None):
@@ -419,6 +431,7 @@ class GitHubIndexer():
         for item in targets:
             if item.isdigit():
                 msg('*** Cannot retrieve new repos by id -- skipping {}'.format(item))
+                continue
             elif item.find('/') > 1:
                 owner = item[:item.find('/')]
                 name  = item[item.find('/') + 1:]
@@ -814,14 +827,21 @@ class GitHubIndexer():
         If something is already in our database, this won't change it unless
         the flag 'overwrite' is True.
         '''
-        def body_function(entry):
+        def body_function(thing):
             t1 = time()
-            if isinstance(entry, github3.repos.repo.Repository):
-                self.add_entry_from_github3(entry)
-                msg('{}/{} (#{}) added'.format(entry.owner.login, entry.name,
-                                               entry.id))
+            if isinstance(thing, github3.repos.repo.Repository):
+                (is_new, entry) = self.add_entry_from_github3(thing, overwrite)
+                if is_new:
+                    msg('{} added'.format(e_summary(entry)))
+                elif overwrite:
+                    msg('{} updated'.format(e_summary(entry)))
+                else:
+                    msg('*** Skipping existing entry {}'.format(e_summary(entry)))
             elif overwrite:
-                # We have an entry already, and we're doing an update.
+                # The targets are not github3 objects but rather our database
+                # entry dictionaries, which means they're in our database,
+                # which means we're doing updates of existing entries.
+                entry = thing
                 repo = self.github().repository(entry['owner'], entry['name'])
                 if repo:
                     self.update_entry_from_github3(entry, repo)
@@ -831,7 +851,7 @@ class GitHubIndexer():
                     self.update_field(entry, 'is_visible', False)
             else:
                 # We have an entry already, but we're not doing an update.
-                msg('*** Skipping existing entry {}'.format(e_summary(entry)))
+                msg('*** Skipping existing entry {}'.format(e_summary(thing)))
 
         total = humanize.intcomma(self.db.count())
         msg('Database has {} total GitHub entries.'.format(total))
