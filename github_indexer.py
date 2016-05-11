@@ -397,7 +397,6 @@ class GitHubIndexer():
                         if calls_left < 1:
                             msg('GitHub API rate limit exceeded')
                             self.wait_for_reset()
-                            loop_count = 0
                             calls_left = self.api_calls_left()
                             retry = True
                         else:
@@ -486,7 +485,11 @@ class GitHubIndexer():
     def repo_list(self, targets=None):
         # Returns a list of github3 repo objects.
         output = []
+        count = 0
+        start = time()
+        msg('Constructing target list...')
         for item in targets:
+            count += 1
             if item.isdigit():
                 msg('*** Cannot retrieve new repos by id -- skipping {}'.format(item))
                 continue
@@ -507,6 +510,11 @@ class GitHubIndexer():
                 output.append(repo)
             else:
                 msg('*** {} not found in GitHub'.format(item))
+
+            if count % 100 == 0:
+                msg('{} [{:2f}]'.format(count, time() - start))
+                start = time()
+        msg('Constructing target list... Done.')
         return output
 
 
