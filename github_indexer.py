@@ -206,7 +206,7 @@ class GitHubIndexer():
         return 'http://github.com/' + entry['owner'] + '/' + entry['name']
 
 
-    def get_repo_iterator(self, last_seen=None):
+    def get_github_iterator(self, last_seen=None):
         try:
             if last_seen:
                 return self.github().iter_all_repos(since=last_seen)
@@ -411,6 +411,26 @@ class GitHubIndexer():
         else:
             # Empty targets, so match against all entries.
             return self.db.find({}, criteria, no_cursor_timeout=True)
+
+
+    def repo_list(self, targets=None):
+        # Returns a list of github3 repo objects.
+        output = []
+        for item in targets:
+            if item.isdigit():
+                msg('*** Cannot retrieve new repos by id -- skipping {}'.format(item))
+            elif item.find('/') > 1:
+                owner = item[:item.find('/')]
+                name  = item[item.find('/') + 1:]
+                repo = self.github().repository(owner, name)
+            else:
+                msg('*** Skipping uninterpretable "{}"'.format(item))
+                continue
+            if repo:
+                output.append(repo)
+            else:
+                msg('*** {} not found in GitHub'.format(item))
+        return output
 
 
     def language_query(self, lang_filter):
@@ -650,6 +670,7 @@ class GitHubIndexer():
         # doesn't speed things up.  The approach here is to return as soon as
         # we find a result, which is faster than anything else.
 
+        import ipdb; ipdb.set_trace()
         exts = ['', '.md', '.txt', '.markdown', '.rdoc', '.rst']
         base_url = 'https://raw.githubusercontent.com/' + e_path(entry)
         for ext in exts:
@@ -787,15 +808,20 @@ class GitHubIndexer():
         self.loop(self.entry_list, body_function, selected_repos, targets)
 
 
-    def create_index(self, targets=None, continuation=True):
+    def create_index(self, targets=None, overwrite=False):
+        '''Create index by looking for new entries in GitHub, or adding entries
+        whose id's or owner/name paths are given in the parameter 'targets'.
+        If something is already in our database, this won't change it unless
+        the flag 'overwrite' is True.
+        '''
         def body_function(entry):
             t1 = time()
             if isinstance(entry, github3.repos.repo.Repository):
                 self.add_entry_from_github3(entry)
                 msg('{}/{} (#{}) added'.format(entry.owner.login, entry.name,
                                                entry.id))
-            else:
-                # We have an entry already, which means we're doing an update.
+            elif overwrite:
+                # We have an entry already, and we're doing an update.
                 repo = self.github().repository(entry['owner'], entry['name'])
                 if repo:
                     self.update_entry_from_github3(entry, repo)
@@ -803,24 +829,38 @@ class GitHubIndexer():
                 else:
                     msg('*** {} no longer exists'.format(e_summary(entry)))
                     self.update_field(entry, 'is_visible', False)
+            else:
+                # We have an entry already, but we're not doing an update.
+                msg('*** Skipping existing entry {}'.format(e_summary(entry)))
 
         total = humanize.intcomma(self.db.count())
         msg('Database has {} total GitHub entries.'.format(total))
         if targets:
-            repo_iterator = self.entry_list
-        else:
-            if continuation:
-                last_seen = self.get_last_seen_id()
-                if last_seen:
-                    msg('Continuing from highest-known id {}'.format(last_seen))
-                else:
-                    msg('No record of the last-seen repo.  Starting from the top.')
-                    last_seen = -1
+            # We have a list of id's or repo paths.
+            if overwrite:
+                # Using the overwrite flag only makes sense if we expect that
+                # the entries are in the database already.
+                repo_iterator = self.entry_list
             else:
+                # We're indexing but not overwriting. We assume that what
+                # we're given as targets are completely new repo id's or paths.
+                repo_iterator = self.repo_list
+        else:
+            last_seen = self.get_last_seen_id()
+            if last_seen:
+                msg('Continuing from highest-known id {}'.format(last_seen))
+            else:
+                msg('No record of the last-seen repo.  Starting from the top.')
                 last_seen = -1
-            repo_iterator = self.get_repo_iterator
+            repo_iterator = self.get_github_iterator
+
         # Set up selection criteria and start the loop
         self.loop(repo_iterator, body_function, None, targets or last_seen)
+
+
+    def recreate_index(self, targets=None):
+        '''Reindex entries from GitHub, even if they are already in our db.'''
+        self.create_index(targets, overwrite=True)
 
 
 
@@ -1001,7 +1041,7 @@ class GitHubIndexer():
     #     if id_list:
     #         repo_iterator = iter(id_list)
     #     else:
-    #         repo_iterator = self.get_repo_iterator(last_seen)
+    #         repo_iterator = self.get_github_iterator(last_seen)
     #     loop_count    = 0
     #     failures      = 0
     #     start         = time()
