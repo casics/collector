@@ -184,6 +184,7 @@ class GitHubIndexer():
                         msg('GitHb code 403 for {}/{}'.format(owner, name))
                         break
                 elif err.code == 451:
+                    # https://developer.github.com/changes/2016-03-17-the-451-status-code-is-now-supported/
                     msg('GitHub code 451 (blocked) for {}/{}'.format(owner, name))
                     break
                 else:
@@ -755,7 +756,6 @@ class GitHubIndexer():
         # doesn't speed things up.  The approach here is to return as soon as
         # we find a result, which is faster than anything else.
 
-        import ipdb; ipdb.set_trace()
         exts = ['', '.md', '.txt', '.markdown', '.rdoc', '.rst']
         base_url = 'https://raw.githubusercontent.com/' + e_path(entry)
         for ext in exts:
