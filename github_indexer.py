@@ -245,10 +245,11 @@ class GitHubIndexer():
 
 
     def github_url(self, entry, owner=None, name=None):
-        return 'http://github.com' + self.github_url_path(entry, owner, name)
+        return 'https://github.com' + self.github_url_path(entry, owner, name)
 
 
     def github_url_exists(self, entry, owner=None, name=None):
+        '''Returns the URL actually returned by GitHub, in case of redirects.'''
         url_path = self.github_url_path(entry, owner, name)
         try:
             conn = http.client.HTTPSConnection('github.com', timeout=15)
@@ -262,7 +263,22 @@ class GitHubIndexer():
                 return None
         conn.request('HEAD', url_path)
         resp = conn.getresponse()
-        return resp.status < 400
+        if resp.status < 400:
+            return resp.headers['Location']
+        else:
+            return False
+
+
+    def owner_name_from_github_url(self, url):
+        if url.startswith('https'):
+            # length of https://github.com/ = 18
+            path = url[19:]
+            return (path[:path.find('/')], path[path.find('/') +1:])
+        elif url.startswith('http'):
+            path = url[18:]
+            return (path[:path.find('/')], path[path.find('/') +1:])
+        else:
+            return (None, None)
 
 
     def get_github_iterator(self, last_seen=None):
@@ -302,42 +318,70 @@ class GitHubIndexer():
 
 
     def update_entry(self, entry):
-        entry['refreshed'] = now_timestamp()
         self.db.replace_one({'_id' : entry['_id']}, entry)
 
 
     def update_field(self, entry, field, value):
         entry[field] = value
         now = now_timestamp()
-        entry['refreshed'] = now
         self.db.update({'_id': entry['_id']},
-                       {'$set': {field: value, 'refreshed': now}})
+                       {'$set': {field: value,
+                                 'time.data_refreshed': now}})
+        # Update this so that the object being held by the caller reflects
+        # what was written to the database.
+        entry['time']['data_refreshed'] = now
 
 
-    def fork_info_from_github3(self, repo):
-        if repo.fork and repo.parent:
-            fork_info = repo.parent.owner.login + '/' + repo.parent.name
+    def update_fork_field(self, entry, fork_parent, fork_root):
+        if entry['fork']:
+            if fork_parent:
+                entry['fork']['parent'] = fork_parent
+            if fork_root:
+                entry['fork']['root'] = fork_root
         else:
-            fork_info = repo.fork
+            fork_dict = {}
+            fork_dict['parent'] = fork_parent
+            fork_dict['root']   = fork_root
+            entry['fork'] = fork_dict
+        self.update_field(entry, 'fork', entry['fork'])
 
 
     def update_entry_from_github3(self, entry, repo):
         # Update existing entry.
-        # This purposefully does not change 'languages' and 'readme', because
-        # they are not in the github3 structure and if we're updating an
-        # existing entry in our database, we don't want to destroy those
-        # fields if we have them.
+        #
+        # Since github3 accesses the live github API, whatever data we get,
+        # we assume is authoritative and overrides almost everything we may
+        # already have for the entry.
+        #
+        # However, this purposefully does not change 'languages' and
+        # 'readme', because they are not in the github3 structure and if
+        # we're updating an existing entry in our database, we don't want to
+        # destroy those fields if we have them.
+
         entry['owner']          = repo.owner.login
         entry['name']           = repo.name
         entry['description']    = repo.description
-        entry['created']        = canonicalize_timestamp(repo.created_at)
-        entry['refreshed']      = now_timestamp()
-        entry['is_visible']     = not repo.private
-        entry['is_deleted']     = False
-        entry['is_fork']        = repo.fork
-        entry['fork_of']        = self.fork_info_from_github3(repo)
         entry['default_branch'] = repo.default_branch
-        entry['archive_url']    = str(repo.archive_urlt)
+        entry['homepage']       = repo.homepage
+        entry['is_visible']     = not repo.private
+        entry['is_deleted']     = False   # github3 found it => not deleted.
+
+        if repo.language and (not entry['languages'] or entry['languages'] == -1):
+            # We may add more languages than the single language returned by
+            # the github API, so we don't overwrite this field unless warranted.
+            entry['languages'] = [{'name': repo.language}]
+
+        fork_dict = {}
+        if repo.fork:
+            fork_dict['parent'] = repo.parent.full_name if repo.parent else ''
+            fork_dict['root']   = repo.source.full_name if repo.source else ''
+        entry['fork'] = fork_dict
+
+        entry['time']['repo_created']   = canonicalize_timestamp(repo.created_at)
+        entry['time']['repo_updated']   = canonicalize_timestamp(repo.updated_at)
+        entry['time']['repo_pushed']    = canonicalize_timestamp(repo.pushed_at)
+        entry['time']['data_refreshed'] = now_timestamp()
+
         self.update_entry(entry)
 
 
@@ -350,18 +394,25 @@ class GitHubIndexer():
             # because they are not in the github3 structure and if we're
             # updating an existing entry in our database, we don't want to
             # destroy those fields if we have them.
+            fork_of = repo.parent.full_name if repo.parent else ''
+            fork_root = repo.source.full_name if repo.source else ''
+            languages = [{'name': repo.language}] if repo.language else []
             entry = repo_entry(id=repo.id,
-                               owner=repo.owner.login,
                                name=repo.name,
+                               owner=repo.owner.login,
                                description=repo.description,
-                               created=canonicalize_timestamp(repo.created_at),
-                               refreshed=now_timestamp(),
-                               is_visible=not repo.private,
-                               is_deleted=False,
-                               is_fork=repo.fork,
-                               fork_of=self.fork_info_from_github3(repo),
+                               languages=languages,
                                default_branch=repo.default_branch,
-                               archive_url=str(repo.archive_urlt))
+                               homepage=repo.homepage,
+                               is_deleted=False,
+                               is_visible=not repo.private,
+                               is_fork=repo.fork,
+                               fork_of=fork_of,
+                               fork_root=fork_root,
+                               created=canonicalize_timestamp(repo.created_at),
+                               last_updated=canonicalize_timestamp(repo.updated_at),
+                               last_pushed=canonicalize_timestamp(repo.pushed_at),
+                               data_refreshed=now_timestamp())
             self.add_entry(entry)
             return (True, entry)
         elif overwrite:
@@ -450,9 +501,23 @@ class GitHubIndexer():
                 result = self.db.find_one({'owner': owner, 'name': name})
                 if result:
                     return int(result['_id'])
-                else:
+
+                # We may yet have the entry in our database, but its name may
+                # have changed.  Either we have to use an API call or we can
+                # check if the home page exists on github.com.
+                url = self.github_url_exists(None, owner, name)
+                if not url:
                     msg_notfound(item)
                     return None
+                (n_owner, n_name) = self.owner_name_from_github_url(url)
+                if n_owner and n_name:
+                    result = self.db.find_one({'owner': n_owner, 'name': n_name})
+                    if result:
+                        msg('*** {}/{} is now {}/{}'.format(owner, name,
+                                                            n_owner, n_name))
+                        return int(result['_id'])
+                msg_notfound(item)
+                return None
         msg_bad(item)
         return None
 
@@ -483,40 +548,54 @@ class GitHubIndexer():
             return self.db.find({}, criteria, no_cursor_timeout=True)
 
 
-    def repo_list(self, targets=None):
+    def repo_list(self, targets=None, prefer_http=False):
         # Returns a list of github3 repo objects.
         output = []
         count = 0
+        total = 0
         start = time()
         msg('Constructing target list...')
         for item in targets:
             count += 1
-            if item.isdigit():
+            if isinstance(item, int) or item.isdigit():
                 msg('*** Cannot retrieve new repos by id -- skipping {}'.format(item))
                 continue
             elif item.find('/') > 1:
                 owner = item[:item.find('/')]
                 name  = item[item.find('/') + 1:]
-
-                # FIXME
-                if self.github_url_exists(None, owner, name):
-                    repo = self.repo_via_api(owner, name)
+                if prefer_http:
+                    # Github seems to redirect URLs to the new pages of
+                    # projects that have been renamed, so this works even if
+                    # we have an old owner/name combination.
+                    url = self.github_url_exists(None, owner, name)
+                    if url:
+                        (owner, name) = self.owner_name_from_github_url(url)
+                        repo = self.repo_via_api(owner, name)
+                    else:
+                        msg('*** No home page for {}/{} -- skipping'.format(owner, name))
+                        continue
                 else:
-                    msg('*** No home page for {}/{} -- skipping'.format(owner, name))
-                    continue
+                    # Don't prefer http => we go straight to API.
+                    repo = self.repo_via_api(owner, name)
             else:
                 msg('*** Skipping uninterpretable "{}"'.format(item))
                 continue
+
             if repo:
                 output.append(repo)
+                total += 1
             else:
                 msg('*** {} not found in GitHub'.format(item))
 
             if count % 100 == 0:
                 msg('{} [{:2f}]'.format(count, time() - start))
                 start = time()
-        msg('Constructing target list... Done.')
+        msg('Constructing target list... Done.  {} entries'.format(total))
         return output
+
+
+    def repo_list_prefer_http(self, targets=None):
+        return self.repo_list(targets, True)
 
 
     def language_query(self, lang_filter):
@@ -596,7 +675,7 @@ class GitHubIndexer():
 
 
     def print_details(self, targets={}, lang_filter=None):
-        width = len('DESCRIPTION:')
+        width = len('DEFAULT BRANCH:')
         filter = None
         if lang_filter:
             msg('Limiting output to entries having languages', lang_filter)
@@ -612,20 +691,24 @@ class GitHubIndexer():
                     entry['description'].encode(sys.stdout.encoding, errors='replace'))
             else:
                 msg('DESCRIPTION:')
-            if entry['languages']:
+            if entry['languages'] and entry['languages'] != -1:
                 msg('LANGUAGES:'.ljust(width), ', '.join(e_languages(entry)))
             else:
                 msg('LANGUAGES:')
-            msg('CREATED:'.ljust(width), timestamp_str(entry['created']))
-            if entry['is_fork'] and entry['fork_of']:
-                fork_status = 'Yes, forked from ' + entry['fork_of']
-            elif entry['is_fork']:
+            if entry['fork'] and entry['fork']['parent']:
+                fork_status = 'Yes, forked from ' + entry['fork']['parent']
+            elif entry['fork']:
                 fork_status = 'Yes'
             else:
                 fork_status = 'No'
-            msg('IS FORK:'.ljust(width), fork_status)
-            msg('IS DELETED:'.ljust(width), 'Yes' if entry['is_deleted'] else 'No')
-            msg('REFRESHED:'.ljust(width), timestamp_str(entry['refreshed']))
+            msg('FORK:'.ljust(width), fork_status)
+            msg('VISIBLE:'.ljust(width), 'Yes' if entry['is_visible'] else 'No')
+            msg('DELETED:'.ljust(width), 'Yes' if entry['is_deleted'] else 'No')
+            msg('CREATED:'.ljust(width), timestamp_str(entry['time']['repo_created']))
+            msg('UPDATED:'.ljust(width), timestamp_str(entry['time']['repo_updated']))
+            msg('PUSHED:'.ljust(width), timestamp_str(entry['time']['repo_pushed']))
+            msg('DATA REFRESHED:'.ljust(width), timestamp_str(entry['time']['data_refreshed']))
+            msg('DEFAULT BRANCH:'.ljust(width), entry['default_branch'])
             if entry['readme'] and entry['readme'] != -1:
                 msg('README:')
                 msg(entry['readme'])
@@ -835,10 +918,15 @@ class GitHubIndexer():
                 if desc:
                     self.update_field(entry, 'description', desc)
                 if fork:
-                    # Don't change copy_of if we couldn't read it while
-                    # looking for languages, because we might have stored
-                    # it previously using a different data source.
-                    self.update_field(entry, 'fork_of', fork)
+                    if isinstance(fork, str):
+                        self.update_fork_field(entry, fork, '')
+                    elif entry['fork']['parent'] != '':
+                        # The data we have is only "True" and not a repo path.
+                        # If we have more data about the fork, we're better
+                        # off keeping it.
+                        pass
+                    else:
+                        self.update_fork_field(entry, '', '')
                 self.update_field(entry, 'is_visible', True)
 
         # Set up deafult selection criteria when not using 'targets'.
@@ -893,7 +981,7 @@ class GitHubIndexer():
         self.loop(self.entry_list, body_function, selected_repos, targets)
 
 
-    def create_index(self, targets=None, overwrite=False):
+    def create_index(self, targets=None, prefer_http=False, overwrite=False):
         '''Create index by looking for new entries in GitHub, or adding entries
         whose id's or owner/name paths are given in the parameter 'targets'.
         If something is already in our database, this won't change it unless
@@ -931,12 +1019,15 @@ class GitHubIndexer():
             # We have a list of id's or repo paths.
             if overwrite:
                 # Using the overwrite flag only makes sense if we expect that
-                # the entries are in the database already.
+                # the entries are in the database already => use entry_list()
                 repo_iterator = self.entry_list
             else:
                 # We're indexing but not overwriting. We assume that what
                 # we're given as targets are completely new repo id's or paths.
-                repo_iterator = self.repo_list
+                if prefer_http:
+                    repo_iterator = self.repo_list_prefer_http
+                else:
+                    repo_iterator = self.repo_list
         else:
             last_seen = self.get_last_seen_id()
             if last_seen:
@@ -950,9 +1041,9 @@ class GitHubIndexer():
         self.loop(repo_iterator, body_function, None, targets or last_seen)
 
 
-    def recreate_index(self, targets=None):
+    def recreate_index(self, targets=None, prefer_http=False):
         '''Reindex entries from GitHub, even if they are already in our db.'''
-        self.create_index(targets, overwrite=True)
+        self.create_index(targets, prefer_http=prefer_http, overwrite=True)
 
 
 
