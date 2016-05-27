@@ -78,7 +78,7 @@ from github_indexer import GitHubIndexer
 # should hopefully be possible.
 
 def main(acct=None, index_create=False, index_recreate=False,
-         file=None, http_only=False, index_forks=False, lang=None,
+         file=None, http=False, index_forks=False, lang=None,
          index_langs=False, print_details=False, print_ids=False,
          index_readmes=False, print_index=False, summarize=False, update=False,
          list_deleted=False, delete=False, *repos):
@@ -102,11 +102,11 @@ def main(acct=None, index_create=False, index_recreate=False,
     elif print_ids:       call("print_indexed_ids", acct, repos, lang)
     elif print_index:     call("print_index",       acct, repos, lang)
     elif print_details:   call("print_details",     acct, repos, lang)
-    elif index_create:    call("create_index",      acct, repos)
-    elif index_recreate:  call("recreate_index",    acct, repos)
+    elif index_create:    call("create_index",      acct, repos, http)
+    elif index_recreate:  call("recreate_index",    acct, repos, http)
     elif index_langs:     call("add_languages",     acct, repos)
     elif index_forks:     call("add_fork_info",     acct, repos)
-    elif index_readmes:   call("add_readmes",       acct, repos, lang, http_only)
+    elif index_readmes:   call("add_readmes",       acct, repos, lang, http)
     elif delete:          call("mark_deleted",      acct, repos)
     elif list_deleted:    call("list_deleted",      acct, repos)
     elif update:          call("update_entries",    acct, repos)
@@ -114,7 +114,7 @@ def main(acct=None, index_create=False, index_recreate=False,
         raise SystemExit('No action specified. Use -h for help.')
 
 
-def call(action, login=None, targets=None, languages=None, http_only=False):
+def call(action, login=None, targets=None, languages=None, http=False):
     msg('Started at ', datetime.now())
     started = timer()
 
@@ -132,23 +132,23 @@ def call(action, login=None, targets=None, languages=None, http_only=False):
         # Figure out what action we're supposed to perform, and do it.
         method = getattr(indexer, action, None)
         if targets and languages:
-            if http_only:
-                method(targets, languages, http_only)
+            if http:
+                method(targets, languages, http)
             else:
                 method(targets, languages)
         elif targets:
-            if http_only:
-                method(targets, None, http_only)
+            if http:
+                method(targets, None, http)
             else:
                 method(targets)
         elif languages:
-            if http_only:
-                method(None, languages, http_only)
+            if http:
+                method(None, languages, http)
             else:
                 method(None, languages)
         else:
-            if http_only:
-                method(None, None, http_only)
+            if http:
+                method(None, None, http)
             else:
                 method()
     finally:
@@ -206,7 +206,7 @@ main.__annotations__ = dict(
     index_create    = ('gather basic index data',                    'flag',   'c'),
     index_recreate  = ('re-gather basic index data',                 'flag',   'C'),
     file            = ('get repo names or identifiers from file',    'option', 'f'),
-    http_only       = ('use only HTTP, without resorting to API',    'flag'  , 'H'),
+    http            = ('prefer HTTP without using API, if possible', 'flag'  , 'H'),
     lang            = ('limit printing to specific languages',       'option', 'L'),
     index_forks     = ('gather repository copy/fork status',         'flag',   'k'),
     index_langs     = ('gather programming languages',               'flag',   'l'),
