@@ -624,7 +624,7 @@ class GitHubIndexer():
             for lang in e_languages(entry):
                 totals[lang] = totals[lang] + 1 if lang in totals else 1
         seen = humanize.intcomma(seen)
-        msg('Language usage counts for {} entries:'.format())
+        msg('Language usage counts for {} entries:'.format(seen))
         for name, count in sorted(totals.items(), key=operator.itemgetter(1),
                                  reverse=True):
             msg('  {0:<24s}: {1}'.format(name, count))
@@ -990,7 +990,7 @@ class GitHubIndexer():
         # It makes no sense to me, and I don't understand what's going on.
         # To be safer, I removed the check against visibility here, and added
         # an explicit test in body_function() above.
-        selected_repos = {'readme': {"$eq" : ''}, 'is_deleted': False}
+        selected_repos = {'readme': '', 'is_deleted': False}
         # And let's do it.
         self.loop(self.entry_list, body_function, selected_repos, targets)
 
