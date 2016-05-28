@@ -371,11 +371,13 @@ class GitHubIndexer():
             # the github API, so we don't overwrite this field unless warranted.
             entry['languages'] = [{'name': repo.language}]
 
-        fork_dict = {}
         if repo.fork:
+            fork_dict = {}
             fork_dict['parent'] = repo.parent.full_name if repo.parent else ''
             fork_dict['root']   = repo.source.full_name if repo.source else ''
-        entry['fork'] = fork_dict
+            entry['fork'] = fork_dict
+        else:
+            entry['fork'] = False
 
         entry['time']['repo_created']   = canonicalize_timestamp(repo.created_at)
         entry['time']['repo_updated']   = canonicalize_timestamp(repo.updated_at)
