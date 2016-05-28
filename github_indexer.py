@@ -699,7 +699,7 @@ class GitHubIndexer():
                 msg('LANGUAGES:')
             if entry['fork'] and entry['fork']['parent']:
                 fork_status = 'Yes, forked from ' + entry['fork']['parent']
-            elif entry['fork'] != False:
+            elif entry['fork']:
                 fork_status = 'Yes'
             else:
                 fork_status = 'No'
