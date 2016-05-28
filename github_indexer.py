@@ -524,30 +524,30 @@ class GitHubIndexer():
         return None
 
 
-    def entry_list(self, targets=None, criteria=None):
+    def entry_list(self, targets=None, fields=None):
         # Returns a list of mongodb entries.
-        if criteria:
+        if fields:
             # Restructure the list of fields into the format expected by mongo.
-            criteria = {x:1 for x in criteria}
-            if '_id' not in criteria:
+            fields = {x:1 for x in fields}
+            if '_id' not in fields:
                 # By default, Mongodb will return _id even if not requested.
                 # Skip it unless the caller explicitly wants it.
-                criteria.append({'_id': 0})
+                fields.append({'_id': 0})
         if isinstance(targets, dict):
             # Caller provided a query string, so use it directly.
-            return self.db.find(targets, criteria, no_cursor_timeout=True)
+            return self.db.find(targets, fields, no_cursor_timeout=True)
         elif isinstance(targets, list):
             # Caller provided a list of id's or repo names.
             ids = [self.ensure_id(x) for x in targets]
-            return self.db.find({'_id': {'$in': ids}}, criteria,
+            return self.db.find({'_id': {'$in': ids}}, fields,
                                 no_cursor_timeout=True)
         elif isinstance(targets, int):
             # Single target, assumed to be a repo identifier.
-            return self.db.find({'_id' : targets}, criteria,
+            return self.db.find({'_id' : targets}, fields,
                                 no_cursor_timeout=True)
         else:
             # Empty targets, so match against all entries.
-            return self.db.find({}, criteria, no_cursor_timeout=True)
+            return self.db.find({}, fields, no_cursor_timeout=True)
 
 
     def repo_list(self, targets=None, prefer_http=False):
@@ -615,7 +615,7 @@ class GitHubIndexer():
         seen = 0                        # Total number of entries seen.
         for entry in self.entry_list(targets
                                      or {'languages':  {"$ne" : [], "$ne" : -1}},
-                                     only_return=['languages']):
+                                     fields=['languages']):
             seen += 1
             if seen % 100000 == 0:
                 print(seen, '...', end='', flush=True)
@@ -640,7 +640,7 @@ class GitHubIndexer():
         msg('-'*79)
         msg("The following entries have 'is_deleted' = True:")
         for entry in self.entry_list(targets or {'is_deleted': True},
-                                     only_return={'_id', 'owner', 'name'}):
+                                     fields={'_id', 'owner', 'name'}):
             msg(e_summary(entry))
         msg('-'*79)
 
@@ -649,8 +649,8 @@ class GitHubIndexer():
         '''Print an overall summary of the database.'''
         total = humanize.intcomma(self.db.count())
         msg('Database has {} total GitHub entries.'.format(total))
-        last_seen = self.get_last_seen_id()
-        if last_seen:
+        last_seen_id = self.get_last_seen_id()
+        if last_seen_id:
             msg('Last seen GitHub id: {}.'.format(last_seen_id))
         else:
             msg('*** no entries ***')
@@ -672,7 +672,7 @@ class GitHubIndexer():
             msg('Total number of entries: {}'.format(humanize.intcomma(results.count())))
         else:
             msg('Total number of entries: {}'.format(humanize.intcomma(self.db.count())))
-        for entry in self.entry_list(filter or targets, only_return=['_id']):
+        for entry in self.entry_list(filter or targets, fields=['_id']):
             msg(entry['_id'])
 
 
@@ -725,7 +725,7 @@ class GitHubIndexer():
             filter = self.language_query(lang_filter)
         fields = ['owner', 'name', '_id', 'languages']
         msg('-'*79)
-        for entry in self.entry_list(filter or targets, only_return=fields):
+        for entry in self.entry_list(filter or targets, fields=fields):
             langs = e_languages(entry)
             if langs != -1:
                 langs = ' '.join(langs) if langs else ''
