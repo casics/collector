@@ -699,7 +699,7 @@ class GitHubIndexer():
                 msg('LANGUAGES:')
             if entry['fork'] and entry['fork']['parent']:
                 fork_status = 'Yes, forked from ' + entry['fork']['parent']
-            elif entry['fork']:
+            elif entry['fork'] != False:
                 fork_status = 'Yes'
             else:
                 fork_status = 'No'
@@ -923,9 +923,9 @@ class GitHubIndexer():
                     if isinstance(fork, str):
                         self.update_fork_field(entry, fork, '')
                     elif entry['fork']['parent'] != '':
-                        # The data we have is only "True" and not a repo path.
-                        # If we have more data about the fork, we're better
-                        # off keeping it.
+                        # The data we got back is only "True" and not a repo
+                        # path.  If we have more data about the fork in our
+                        # db (meaning it's not ''), we're better off keeping it.
                         pass
                     else:
                         self.update_fork_field(entry, '', '')
