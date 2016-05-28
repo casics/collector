@@ -940,6 +940,9 @@ class GitHubIndexer():
 
     def add_readmes(self, targets=None, languages=None, http_only=False):
         def body_function(entry):
+            if entry['is_visible'] == False:
+                # See note at the end of the parent function (add_readmes).
+                return
             t1 = time()
             (method, readme) = self.get_readme(entry, http_only)
             if isinstance(readme, int) and readme >= 400 and not http_only:
@@ -976,9 +979,18 @@ class GitHubIndexer():
                 self.update_field(entry, 'readme', -1)
             self.update_field(entry, 'is_visible', True)
 
-        # Set up deafult selection criteria when not using 'targets'.
-        selected_repos = {'readme': {"$eq" : ''}, 'is_deleted': False,
-                          'is_visible': {"$ne" : False}}
+        # Set up default selection criteria when not using 'targets'.
+        #
+        # Note 2016-05-27: I had trouble with adding a check against
+        # is_visible here.  Adding the following tests caused entries to be
+        # skipped that (via manual searches without the criteria) clearly
+        # should have been returned by the mongodb find() operation:
+        #   'is_visible': {"$ne": False}
+        #   'is_visible': {"$in": ['', True]}
+        # It makes no sense to me, and I don't understand what's going on.
+        # To be safer, I removed the check against visibility here, and added
+        # an explicit test in body_function() above.
+        selected_repos = {'readme': {"$eq" : ''}, 'is_deleted': False}
         # And let's do it.
         self.loop(self.entry_list, body_function, selected_repos, targets)
 
