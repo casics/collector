@@ -532,7 +532,7 @@ class GitHubIndexer():
             if '_id' not in fields:
                 # By default, Mongodb will return _id even if not requested.
                 # Skip it unless the caller explicitly wants it.
-                fields.append({'_id': 0})
+                fields['_id'] = 0
         if isinstance(targets, dict):
             # Caller provided a query string, so use it directly.
             return self.db.find(targets, fields, no_cursor_timeout=True)
@@ -614,7 +614,7 @@ class GitHubIndexer():
         totals = {}                     # Pairs of language:count.
         seen = 0                        # Total number of entries seen.
         for entry in self.entry_list(targets
-                                     or {'languages':  {"$ne" : [], "$ne" : -1}},
+                                     or {'languages':  {"$nin": [-1, []]} },
                                      fields=['languages']):
             seen += 1
             if seen % 100000 == 0:
@@ -631,7 +631,7 @@ class GitHubIndexer():
 
 
     def summarize_readme_stats(self, targets=None):
-        have_readmes = self.db.find({'readme':  {'$ne' : '', '$ne' : -1}}).count()
+        have_readmes = self.db.find({'readme':  {'$nin': ['', -1]} }).count()
         have_readmes = humanize.intcomma(have_readmes)
         msg('Database has {} entries with README files.'.format(have_readmes))
 
