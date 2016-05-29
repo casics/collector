@@ -75,10 +75,11 @@ from github_indexer import GitHubIndexer
 # Main body.
 # .............................................................................
 # Currently this only does GitHub, but extending this to handle other hosts
-# should hopefully be possible.
+# should hopefully be possible.  See later in this file for the definition
+# of the arguments to main().
 
 def main(acct=None, index_create=False, index_recreate=False,
-         file=None, http=False, index_forks=False, lang=None,
+         file=None, force=False, http=False, index_forks=False, lang=None,
          index_langs=False, print_details=False, print_ids=False,
          index_readmes=False, print_index=False, summarize=False, update=False,
          list_deleted=False, delete=False, *repos):
@@ -94,30 +95,35 @@ def main(acct=None, index_create=False, index_recreate=False,
             repos = f.read().splitlines()
             if len(repos) > 0 and repos[0].isdigit():
                 repos = [int(x) for x in repos]
-
     if lang:
         lang = lang.split(',')
+    args = {"targets": repos, "languages": lang, "http_only": http, "force": force}
 
-    if   summarize:       call("print_summary",     acct)
-    elif print_ids:       call("print_indexed_ids", acct, repos, lang)
-    elif print_index:     call("print_index",       acct, repos, lang)
-    elif print_details:   call("print_details",     acct, repos, lang)
-    elif index_create:    call("create_index",      acct, repos, http)
-    elif index_recreate:  call("recreate_index",    acct, repos, http)
-    elif index_langs:     call("add_languages",     acct, repos)
-    elif index_forks:     call("add_fork_info",     acct, repos)
-    elif index_readmes:   call("add_readmes",       acct, repos, lang, http)
-    elif delete:          call("mark_deleted",      acct, repos)
-    elif list_deleted:    call("list_deleted",      acct, repos)
-    elif update:          call("update_entries",    acct, repos)
+    if   summarize:       call("print_summary",     login=acct, **args)
+    elif print_ids:       call("print_indexed_ids", login=acct, **args)
+    elif print_index:     call("print_index",       login=acct, **args)
+    elif print_details:   call("print_details",     login=acct, **args)
+    elif index_create:    call("create_index",      login=acct, **args)
+    elif index_recreate:  call("recreate_index",    login=acct, **args)
+    elif index_langs:     call("add_languages",     login=acct, **args)
+    elif index_forks:     call("add_fork_info",     login=acct, **args)
+    elif index_readmes:   call("add_readmes",       login=acct, **args)
+    elif delete:          call("mark_deleted",      login=acct, **args)
+    elif list_deleted:    call("list_deleted",      login=acct, **args)
+    elif update:          call("update_entries",    login=acct, **args)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
 
-def call(action, login=None, targets=None, languages=None, http=False):
+def call(action, login, **kwargs):
     msg('Started at ', datetime.now())
-    started = timer()
 
+    targets   = kwargs['targets']
+    languages = kwargs['languages']
+    http_only = kwargs['http_only']
+    force     = kwargs['force']
+
+    started = timer()
     casicsdb = CasicsDB()
 
     # Do each host in turn.  (Currently we handle only GitHub.)
@@ -131,26 +137,7 @@ def call(action, login=None, targets=None, languages=None, http=False):
 
         # Figure out what action we're supposed to perform, and do it.
         method = getattr(indexer, action, None)
-        if targets and languages:
-            if http:
-                method(targets, languages, http)
-            else:
-                method(targets, languages)
-        elif targets:
-            if http:
-                method(targets, None, http)
-            else:
-                method(targets)
-        elif languages:
-            if http:
-                method(None, languages, http)
-            else:
-                method(None, languages)
-        else:
-            if http:
-                method(None, None, http)
-            else:
-                method()
+        method(targets=targets, languages=languages, http_only=http_only, force=force)
     finally:
         casicsdb.close()
 
@@ -206,6 +193,7 @@ main.__annotations__ = dict(
     index_create    = ('gather basic index data',                    'flag',   'c'),
     index_recreate  = ('re-gather basic index data',                 'flag',   'C'),
     file            = ('get repo names or identifiers from file',    'option', 'f'),
+    force           = ('get info even if we already tried',          'flag',   'F'),
     http            = ('prefer HTTP without using API, if possible', 'flag'  , 'H'),
     lang            = ('limit printing to specific languages',       'option', 'L'),
     index_forks     = ('gather repository copy/fork status',         'flag',   'k'),

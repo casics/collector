@@ -636,7 +636,7 @@ class GitHubIndexer():
         msg('Database has {} entries with README files.'.format(have_readmes))
 
 
-    def list_deleted(self, targets=None):
+    def list_deleted(self, targets=None, **kwargs):
         msg('-'*79)
         msg("The following entries have 'is_deleted' = True:")
         for entry in self.entry_list(targets or {'is_deleted': True},
@@ -645,7 +645,7 @@ class GitHubIndexer():
         msg('-'*79)
 
 
-    def print_summary(self):
+    def print_summary(self, **kwargs):
         '''Print an overall summary of the database.'''
         total = humanize.intcomma(self.db.count())
         msg('Database has {} total GitHub entries.'.format(total))
@@ -659,7 +659,7 @@ class GitHubIndexer():
         self.summarize_language_stats()
 
 
-    def print_indexed_ids(self, targets={}, lang_filter=None):
+    def print_indexed_ids(self, targets={}, lang_filter=None, **kwargs):
         '''Print the known repository identifiers in the database.'''
         filter = None
         if lang_filter:
@@ -676,7 +676,7 @@ class GitHubIndexer():
             msg(entry['_id'])
 
 
-    def print_details(self, targets={}, lang_filter=None):
+    def print_details(self, targets={}, lang_filter=None, **kwargs):
         width = len('DEFAULT BRANCH:')
         filter = None
         if lang_filter:
@@ -717,7 +717,7 @@ class GitHubIndexer():
         msg('='*70)
 
 
-    def print_index(self, targets={}, lang_filter=None):
+    def print_index(self, targets={}, lang_filter=None, **kwargs):
         '''Print the database contents.'''
         filter = None
         if lang_filter:
@@ -878,7 +878,7 @@ class GitHubIndexer():
         return None
 
 
-    def add_languages(self, targets=None):
+    def add_languages(self, targets=None, **kwargs):
         def body_function(entry):
             t1 = time()
             (found, method, langs, fork, desc) = self.get_languages(entry)
@@ -938,7 +938,8 @@ class GitHubIndexer():
         self.loop(self.entry_list, body_function, selected_repos, targets)
 
 
-    def add_readmes(self, targets=None, languages=None, http_only=False):
+    def add_readmes(self, targets=None, languages=None, http_only=False,
+                    force=False, **kwargs):
         def body_function(entry):
             if entry['is_visible'] == False:
                 # See note at the end of the parent function (add_readmes).
@@ -990,12 +991,18 @@ class GitHubIndexer():
         # It makes no sense to me, and I don't understand what's going on.
         # To be safer, I removed the check against visibility here, and added
         # an explicit test in body_function() above.
-        selected_repos = {'readme': '', 'is_deleted': False}
+        if not force:
+            selected_repos = {'readme': '', 'is_deleted': False}
+        else:
+            # "Force" in this context means get readmes even if we previously
+            # tried to get them.
+            selected_repos = {'readme': {'$in': ['', -1]}, 'is_deleted': False}
+
         # And let's do it.
         self.loop(self.entry_list, body_function, selected_repos, targets)
 
 
-    def create_index(self, targets=None, prefer_http=False, overwrite=False):
+    def create_index(self, targets=None, prefer_http=False, overwrite=False, **kwargs):
         '''Create index by looking for new entries in GitHub, or adding entries
         whose id's or owner/name paths are given in the parameter 'targets'.
         If something is already in our database, this won't change it unless
@@ -1055,7 +1062,7 @@ class GitHubIndexer():
         self.loop(repo_iterator, body_function, None, targets or last_seen)
 
 
-    def recreate_index(self, targets=None, prefer_http=False):
+    def recreate_index(self, targets=None, prefer_http=False, **kwargs):
         '''Reindex entries from GitHub, even if they are already in our db.'''
         self.create_index(targets, prefer_http=prefer_http, overwrite=True)
 
