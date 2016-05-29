@@ -122,12 +122,6 @@ def main(acct=None, api_only=False, index_create=False, index_recreate=False,
 def call(action, login, **kwargs):
     msg('Started at ', datetime.now())
 
-    targets     = kwargs['targets']
-    languages   = kwargs['languages']
-    prefer_http = kwargs['prefer_http']
-    api_only    = kwargs['api_only']
-    force       = kwargs['force']
-
     started = timer()
     casicsdb = CasicsDB()
 
@@ -142,8 +136,7 @@ def call(action, login, **kwargs):
 
         # Figure out what action we're supposed to perform, and do it.
         method = getattr(indexer, action, None)
-        method(targets=targets, languages=languages, prefer_http=prefer_http,
-               api_only=api_only, force=force)
+        method(**kwargs)
     finally:
         casicsdb.close()
 
