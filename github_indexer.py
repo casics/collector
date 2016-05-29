@@ -947,7 +947,7 @@ class GitHubIndexer():
                 # See note at the end of the parent function (add_readmes).
                 return
             t1 = time()
-            (method, readme) = self.get_readme(entry, prefer_http)
+            (method, readme) = self.get_readme(entry, prefer_http, api_only)
             if isinstance(readme, int) and readme >= 400:
                 # We got a code over 400, probably 404, but don't know why.
                 # Repo might have been renamed, deleted, made private, or it
@@ -973,7 +973,7 @@ class GitHubIndexer():
                     self.update_field(entry, 'owner', repo.owner.login)
                     self.update_field(entry, 'name', repo.name)
                     # Try again with the info returned by github3.
-                    (method, readme) = self.get_readme(entry, prefer_http)
+                    (method, readme) = self.get_readme(entry, prefer_http, api_only)
                 else:
                     # No readme available.  Drop to the -1 case below.
                     pass
