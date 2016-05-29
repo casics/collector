@@ -78,8 +78,8 @@ from github_indexer import GitHubIndexer
 # should hopefully be possible.  See later in this file for the definition
 # of the arguments to main().
 
-def main(acct=None, index_create=False, index_recreate=False,
-         file=None, force=False, http=False, index_forks=False, lang=None,
+def main(acct=None, api_only=False, index_create=False, index_recreate=False,
+         file=None, force=False, prefer_http=False, index_forks=False, lang=None,
          index_langs=False, print_details=False, print_ids=False,
          index_readmes=False, print_index=False, summarize=False, update=False,
          list_deleted=False, delete=False, *repos):
@@ -87,6 +87,9 @@ def main(acct=None, index_create=False, index_recreate=False,
 
     def convert(arg):
         return int(arg) if (arg and arg.isdigit()) else arg
+
+    if api_only and prefer_http:
+        raise SystemExit('Cannot specify both API-only and prefer-HTTP.')
 
     if repos:
         repos = [convert(x) for x in repos]
@@ -97,7 +100,8 @@ def main(acct=None, index_create=False, index_recreate=False,
                 repos = [int(x) for x in repos]
     if lang:
         lang = lang.split(',')
-    args = {"targets": repos, "languages": lang, "http_only": http, "force": force}
+    args = {"targets": repos, "languages": lang, "prefer_http": prefer_http,
+            "api_only": api_only, "force": force}
 
     if   summarize:       call("print_summary",     login=acct, **args)
     elif print_ids:       call("print_indexed_ids", login=acct, **args)
@@ -118,10 +122,11 @@ def main(acct=None, index_create=False, index_recreate=False,
 def call(action, login, **kwargs):
     msg('Started at ', datetime.now())
 
-    targets   = kwargs['targets']
-    languages = kwargs['languages']
-    http_only = kwargs['http_only']
-    force     = kwargs['force']
+    targets     = kwargs['targets']
+    languages   = kwargs['languages']
+    prefer_http = kwargs['prefer_http']
+    api_only    = kwargs['api_only']
+    force       = kwargs['force']
 
     started = timer()
     casicsdb = CasicsDB()
@@ -137,7 +142,8 @@ def call(action, login, **kwargs):
 
         # Figure out what action we're supposed to perform, and do it.
         method = getattr(indexer, action, None)
-        method(targets=targets, languages=languages, http_only=http_only, force=force)
+        method(targets=targets, languages=languages, prefer_http=prefer_http,
+               api_only=api_only, force=force)
     finally:
         casicsdb.close()
 
@@ -189,23 +195,24 @@ def github_info(hosting_service, service_account):
 # Plac automatically adds a -h argument for help, so no need to do it here.
 
 main.__annotations__ = dict(
-    acct            = ('use specified GitHub account login',         'option', 'a'),
-    index_create    = ('gather basic index data',                    'flag',   'c'),
-    index_recreate  = ('re-gather basic index data',                 'flag',   'C'),
-    file            = ('get repo names or identifiers from file',    'option', 'f'),
-    force           = ('get info even if we already tried',          'flag',   'F'),
-    http            = ('prefer HTTP without using API, if possible', 'flag'  , 'H'),
-    lang            = ('limit printing to specific languages',       'option', 'L'),
-    index_forks     = ('gather repository copy/fork status',         'flag',   'k'),
-    index_langs     = ('gather programming languages',               'flag',   'l'),
-    index_readmes   = ('gather README files',                        'flag',   'r'),
-    print_details   = ('print details about entries',                'flag',   'p'),
-    print_ids       = ('print all known repository id numbers',      'flag',   'P'),
-    print_index     = ('print summary of indexed repositories',      'flag',   's'),
-    summarize       = ('summarize database statistics',              'flag',   'S'),
-    update          = ('update specific entries by querying GitHub', 'flag',   'u'),
-    list_deleted    = ('list deleted entries',                       'flag',   'x'),
-    delete          = ('mark specific entries as deleted',           'flag',   'X'),
+    acct            = ('use specified GitHub account login',          'option', 'a'),
+    api_only        = ('only use the API, without first trying HTTP', 'flag',   'A'),
+    index_create    = ('gather basic index data',                     'flag',   'c'),
+    index_recreate  = ('re-gather basic index data',                  'flag',   'C'),
+    file            = ('get repo names or identifiers from file',     'option', 'f'),
+    force           = ('get info even if we know we already tried',   'flag',   'F'),
+    prefer_http     = ('prefer HTTP without using API, if possible',  'flag'  , 'H'),
+    lang            = ('limit printing to specific languages',        'option', 'L'),
+    index_forks     = ('gather repository copy/fork status',          'flag',   'k'),
+    index_langs     = ('gather programming languages',                'flag',   'l'),
+    index_readmes   = ('gather README files',                         'flag',   'r'),
+    print_details   = ('print details about entries',                 'flag',   'p'),
+    print_ids       = ('print all known repository id numbers',       'flag',   'P'),
+    print_index     = ('print summary of indexed repositories',       'flag',   's'),
+    summarize       = ('summarize database statistics',               'flag',   'S'),
+    update          = ('update specific entries by querying GitHub',  'flag',   'u'),
+    list_deleted    = ('list deleted entries',                        'flag',   'x'),
+    delete          = ('mark specific entries as deleted',            'flag',   'X'),
     repos           = 'one or more repository identifiers or names',
 )
 

@@ -818,9 +818,9 @@ class GitHubIndexer():
             return (True, 'api', json.loads(response), fork_info, description)
 
 
-    def get_readme(self, entry, http_only=False):
+    def get_readme(self, entry, prefer_http=False, api_only=False):
         # First try to get it via direct HTTP access, to save on API calls.
-        # If that fails and http_only != False, we resport to API calls.
+        # If that fails and prefer_http != False, we resport to API calls.
 
         # The direct HTTP access approach simply tries different alternatives
         # one after the other.  The order is based on the popularity of
@@ -841,15 +841,17 @@ class GitHubIndexer():
         # doesn't speed things up.  The approach here is to return as soon as
         # we find a result, which is faster than anything else.
 
-        exts = ['', '.md', '.txt', '.markdown', '.rdoc', '.rst']
-        base_url = 'https://raw.githubusercontent.com/' + e_path(entry)
-        for ext in exts:
-            alternative = base_url + '/master/README' + ext
-            r = requests.get(alternative)
-            if r.status_code == 200:
-                return ('http', r.text)
+        if not api_only:
+            exts = ['', '.md', '.txt', '.markdown', '.rdoc', '.rst']
+            base_url = 'https://raw.githubusercontent.com/' + e_path(entry)
+            for ext in exts:
+                alternative = base_url + '/master/README' + ext
+                r = requests.get(alternative)
+                if r.status_code == 200:
+                    return ('http', r.text)
 
-        if http_only:
+        # If we get here and we're only doing HTTP, then we're done.
+        if prefer_http:
             return ('http', None)
 
         # Resort to GitHub API call.
@@ -938,17 +940,26 @@ class GitHubIndexer():
         self.loop(self.entry_list, body_function, selected_repos, targets)
 
 
-    def add_readmes(self, targets=None, languages=None, http_only=False,
-                    force=False, **kwargs):
+    def add_readmes(self, targets=None, languages=None, prefer_http=False,
+                    api_only=False, force=False, **kwargs):
         def body_function(entry):
             if entry['is_visible'] == False:
                 # See note at the end of the parent function (add_readmes).
                 return
             t1 = time()
-            (method, readme) = self.get_readme(entry, http_only)
-            if isinstance(readme, int) and readme >= 400 and not http_only:
-                # Repo was renamed, deleted, made private, or there's
-                # no home page.  See if our records need to be updated.
+            (method, readme) = self.get_readme(entry, prefer_http)
+            if isinstance(readme, int) and readme >= 400:
+                # We got a code over 400, probably 404, but don't know why.
+                # Repo might have been renamed, deleted, made private, or it
+                # has no README file.  If we're only using the API, it means
+                # we already tried to get the README using the most certain
+                # method (via the API), so we if we think the repo exists, we
+                # call it quits now.  Otherwise, we have more ambiguity and
+                # we try one more time to find the README file.
+                if api_only or prefer_http:
+                    msg('No readme for {}'.format(e_summary(entry)))
+                    self.update_field(entry, 'readme', -1)
+                    return
                 repo = self.github().repository(entry['owner'], entry['name'])
                 if not repo:
                     # Nope, it's gone.
@@ -962,7 +973,7 @@ class GitHubIndexer():
                     self.update_field(entry, 'owner', repo.owner.login)
                     self.update_field(entry, 'name', repo.name)
                     # Try again with the info returned by github3.
-                    (method, readme) = self.get_readme(entry, http_only)
+                    (method, readme) = self.get_readme(entry, prefer_http)
                 else:
                     # No readme available.  Drop to the -1 case below.
                     pass
