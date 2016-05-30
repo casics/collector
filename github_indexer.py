@@ -433,13 +433,13 @@ class GitHubIndexer():
             return (False, entry)
 
 
-    def loop(self, iterator, body_function, selector, targets=None):
+    def loop(self, iterator, body_function, selector, targets=None, start_id=0):
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
         count = 0
         failures = 0
         start = time()
         # By default, only consider those entries without language info.
-        for entry in iterator(targets or selector):
+        for entry in iterator(targets or selector, start_id=start_id):
             retry = True
             while retry and failures < self._max_failures:
                 # Don't retry unless the problem may be transient.
@@ -528,7 +528,7 @@ class GitHubIndexer():
         return None
 
 
-    def entry_list(self, targets=None, fields=None):
+    def entry_list(self, targets=None, fields=None, start_id=0):
         # Returns a list of mongodb entries.
         if fields:
             # Restructure the list of fields into the format expected by mongo.
@@ -543,6 +543,8 @@ class GitHubIndexer():
         elif isinstance(targets, list):
             # Caller provided a list of id's or repo names.
             ids = [self.ensure_id(x) for x in targets]
+            if start_id > 0:
+                ids = [id for id in ids if id >= start_id]
             return self.db.find({'_id': {'$in': ids}}, fields,
                                 no_cursor_timeout=True)
         elif isinstance(targets, int):
@@ -550,8 +552,11 @@ class GitHubIndexer():
             return self.db.find({'_id' : targets}, fields,
                                 no_cursor_timeout=True)
         else:
-            # Empty targets, so match against all entries.
-            return self.db.find({}, fields, no_cursor_timeout=True)
+            # Empty targets; match against all entries greater than start_id.
+            query = {}
+            if start_id > 0:
+                query['_id'] = {'$gte': start_id}
+            return self.db.find(query, fields, no_cursor_timeout=True)
 
 
     def repo_list(self, targets=None, prefer_http=False):
@@ -644,7 +649,8 @@ class GitHubIndexer():
         msg('-'*79)
         msg("The following entries have 'is_deleted' = True:")
         for entry in self.entry_list(targets or {'is_deleted': True},
-                                     fields={'_id', 'owner', 'name'}):
+                                     fields={'_id', 'owner', 'name'},
+                                     start_id=start_id):
             msg(e_summary(entry))
         msg('-'*79)
 
@@ -670,7 +676,7 @@ class GitHubIndexer():
         filter = {}
         if start_id > 0:
             msg('Skipping GitHub id\'s less than {}'.format(start_id))
-            filter['_id'] = {'$gt': start_id}
+            filter['_id'] = {'$gte': start_id}
         if languages:
             msg('Limiting output to entries having languages', languages)
             filter.update(self.language_query(languages))
@@ -679,7 +685,7 @@ class GitHubIndexer():
         else:
             results = self.db.find(filter or targets)
             msg('Total number of entries: {}'.format(humanize.intcomma(results.count())))
-        for entry in self.entry_list(filter or targets, fields=['_id']):
+        for entry in self.entry_list(filter or targets, fields=['_id'], start_id=start_id):
             msg(entry['_id'])
 
 
@@ -689,11 +695,11 @@ class GitHubIndexer():
         filter = {}
         if start_id > 0:
             msg('Skipping GitHub id\'s less than {}'.format(start_id))
-            filter['_id'] = {'$gt': start_id}
+            filter['_id'] = {'$gte': start_id}
         if languages:
             msg('Limiting output to entries having languages', languages)
             filter.update(self.language_query(languages))
-        for entry in self.entry_list(filter or targets):
+        for entry in self.entry_list(filter or targets, start_id=start_id):
             msg('='*70)
             msg('ID:'.ljust(width), entry['_id'])
             msg('URL:'.ljust(width), self.github_url(entry))
@@ -734,13 +740,14 @@ class GitHubIndexer():
         filter = {}
         if start_id > 0:
             msg('Skipping GitHub id\'s less than {}'.format(start_id))
-            filter['_id'] = {'$gt': start_id}
+            filter['_id'] = {'$gte': start_id}
         if languages:
             msg('Limiting output to entries having languages', languages)
             filter.update(self.language_query(languages))
         fields = ['owner', 'name', '_id', 'languages']
         msg('-'*79)
-        for entry in self.entry_list(filter or targets, fields=fields):
+        for entry in self.entry_list(filter or targets, fields=fields,
+                                     start_id=start_id):
             langs = e_languages(entry)
             if langs != -1:
                 langs = ' '.join(langs) if langs else ''
@@ -949,14 +956,14 @@ class GitHubIndexer():
                 self.update_field(entry, 'is_visible', True)
 
         msg('Gathering language data for repositories.')
-        # Set up deafult selection criteria when not using 'targets'.
+        # Set up default selection criteria WHEN NOT USING 'targets'.
         selected_repos = {'languages': {"$eq" : []}, 'is_deleted': False,
                           'is_visible': {"$ne" : False}}
         if start_id > 0:
             msg('Skipping GitHub id\'s less than {}'.format(start_id))
-            selected_repos['_id'] = {'$gt': start_id}
+            selected_repos['_id'] = {'$gte': start_id}
         # And let's do it.
-        self.loop(self.entry_list, body_function, selected_repos, targets)
+        self.loop(self.entry_list, body_function, selected_repos, targets, start_id)
 
 
     def add_readmes(self, targets=None, languages=None, prefer_http=False,
@@ -1013,7 +1020,7 @@ class GitHubIndexer():
                 self.update_field(entry, 'readme', -1)
             self.update_field(entry, 'is_visible', True)
 
-        # Set up default selection criteria when not using 'targets'.
+        # Set up default selection criteria WHEN NOT USING 'targets'.
         #
         # Note 2016-05-27: I had trouble with adding a check against
         # is_visible here.  Adding the following tests caused entries to be
@@ -1028,7 +1035,7 @@ class GitHubIndexer():
         selected_repos = {'is_deleted': False}
         if start_id > 0:
             msg('Skipping GitHub id\'s less than {}'.format(start_id))
-            selected_repos['_id'] = {'$gt': start_id}
+            selected_repos['_id'] = {'$gte': start_id}
         if force:
             # "Force" in this context means get readmes even if we previously
             # tried to get them, which is indicated by a -1 value.
@@ -1037,7 +1044,7 @@ class GitHubIndexer():
             selected_repos['readme'] = ''
 
         # And let's do it.
-        self.loop(self.entry_list, body_function, selected_repos, targets)
+        self.loop(self.entry_list, body_function, selected_repos, targets, start_id)
 
 
     def create_index(self, targets=None, prefer_http=False, overwrite=False, **kwargs):
