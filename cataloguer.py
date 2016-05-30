@@ -91,6 +91,8 @@ def main(acct=None, api_only=False, index_create=False, index_recreate=False,
     if api_only and prefer_http:
         raise SystemExit('Cannot specify both API-only and prefer-HTTP.')
 
+    id = int(id) if id else 0
+    lang = lang.split(',') if lang else None
     if repos:
         repos = [convert(x) for x in repos]
     elif file:
@@ -98,10 +100,6 @@ def main(acct=None, api_only=False, index_create=False, index_recreate=False,
             repos = f.read().splitlines()
             if len(repos) > 0 and repos[0].isdigit():
                 repos = [int(x) for x in repos]
-    if id:
-        id = int(id)
-    if lang:
-        lang = lang.split(',')
 
     args = {'targets': repos, 'languages': lang, 'prefer_http': prefer_http,
             'api_only': api_only, 'force': force, 'start_id': id}
