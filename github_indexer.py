@@ -93,6 +93,15 @@ def make_lang_dict(langs):
     return [{'name': lang} for lang in langs]
 
 
+# Error classes for internal communication.
+# .............................................................................
+
+class DirectAPIException(Exception):
+    def __init__(self, message, code):
+        super(DirectAPIException, self).__init__(message)
+        self.code = code
+
+
 # Main class.
 # .............................................................................
 
@@ -441,7 +450,7 @@ class GitHubIndexer():
                 except StopIteration:
                     msg('Iterator reports it is done')
                     break
-                except github3.GitHubError as err:
+                except (github3.GitHubError, DirectAPIException) as err:
                     if err.code == 403:
                         if self.api_calls_left() < 1:
                             msg('GitHub API rate limit exceeded')
@@ -958,6 +967,9 @@ class GitHubIndexer():
                 return
             t1 = time()
             (method, readme) = self.get_readme(entry, prefer_http, api_only)
+            if isinstance(readme, int) and readme in [403, 451]:
+                # We hit a problem.  Bubble it up to loop().
+                raise DirectAPIException('Getting README', readme)
             if isinstance(readme, int) and readme >= 400:
                 # We got a code over 400, probably 404, but don't know why.
                 # Repo might have been renamed, deleted, made private, or it
