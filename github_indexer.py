@@ -431,9 +431,6 @@ class GitHubIndexer():
         start = time()
         # By default, only consider those entries without language info.
         for entry in iterator(targets or selector):
-            if self.api_calls_left() < 1:
-                self.wait_for_reset()
-                failures = 0
             retry = True
             while retry and failures < self._max_failures:
                 # Don't retry unless the problem may be transient.
@@ -445,15 +442,13 @@ class GitHubIndexer():
                     msg('Iterator reports it is done')
                     break
                 except github3.GitHubError as err:
-                    # Occasionally an error even when not over the rate limit.
                     if err.code == 403:
-                        calls_left = self.api_calls_left()
-                        if calls_left < 1:
+                        if self.api_calls_left() < 1:
                             msg('GitHub API rate limit exceeded')
                             self.wait_for_reset()
-                            calls_left = self.api_calls_left()
                             retry = True
                         else:
+                            # Occasionally get 403 even when not over the limit.
                             msg('GitHub code 403 for {}'.format(e_summary(entry)))
                             self.update_field(entry, 'is_visible', False)
                             retry = False
@@ -600,12 +595,12 @@ class GitHubIndexer():
         return self.repo_list(targets, True)
 
 
-    def language_query(self, lang_filter):
+    def language_query(self, languages):
         filter = None
-        if isinstance(lang_filter, str):
-            filter = {'languages.name': lang_filter}
-        elif isinstance(lang_filter, list):
-            filter = {'languages.name':  {"$in" : lang_filter}}
+        if isinstance(languages, str):
+            filter = {'languages.name': languages}
+        elif isinstance(languages, list):
+            filter = {'languages.name':  {"$in" : languages}}
         return filter
 
 
@@ -645,8 +640,9 @@ class GitHubIndexer():
         msg('-'*79)
 
 
-    def print_summary(self, **kwargs):
+    def print_stats(self, **kwargs):
         '''Print an overall summary of the database.'''
+        msg('Printing general statistics.')
         total = humanize.intcomma(self.db.count())
         msg('Database has {} total GitHub entries.'.format(total))
         last_seen_id = self.get_last_seen_id()
@@ -659,29 +655,35 @@ class GitHubIndexer():
         self.summarize_language_stats()
 
 
-    def print_indexed_ids(self, targets={}, lang_filter=None, **kwargs):
+    def print_indexed_ids(self, targets={}, languages=None, start_id=0, **kwargs):
         '''Print the known repository identifiers in the database.'''
-        filter = None
-        if lang_filter:
-            msg('Limiting output to entries having languages', lang_filter)
-            filter = self.language_query(lang_filter)
+        msg('Printing known GitHub id numbers.')
+        filter = {}
+        if start_id > 0:
+            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            filter['_id'] = {'$gt': start_id}
+        if languages:
+            msg('Limiting output to entries having languages', languages)
+            filter.update(self.language_query(languages))
         if targets:
             msg('Total number of entries: {}'.format(humanize.intcomma(len(targets))))
-        elif lang_filter:
+        else:
             results = self.db.find(filter or targets)
             msg('Total number of entries: {}'.format(humanize.intcomma(results.count())))
-        else:
-            msg('Total number of entries: {}'.format(humanize.intcomma(self.db.count())))
         for entry in self.entry_list(filter or targets, fields=['_id']):
             msg(entry['_id'])
 
 
-    def print_details(self, targets={}, lang_filter=None, **kwargs):
+    def print_details(self, targets={}, languages=None, start_id=0, **kwargs):
+        msg('Printing descriptions of indexed GitHub repositories.')
         width = len('DEFAULT BRANCH:')
-        filter = None
-        if lang_filter:
-            msg('Limiting output to entries having languages', lang_filter)
-            filter = self.language_query(lang_filter)
+        filter = {}
+        if start_id > 0:
+            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            filter['_id'] = {'$gt': start_id}
+        if languages:
+            msg('Limiting output to entries having languages', languages)
+            filter.update(self.language_query(languages))
         for entry in self.entry_list(filter or targets):
             msg('='*70)
             msg('ID:'.ljust(width), entry['_id'])
@@ -717,12 +719,16 @@ class GitHubIndexer():
         msg('='*70)
 
 
-    def print_index(self, targets={}, lang_filter=None, **kwargs):
-        '''Print the database contents.'''
-        filter = None
-        if lang_filter:
-            msg('Limiting output to entries having languages', lang_filter)
-            filter = self.language_query(lang_filter)
+    def print_summary(self, targets={}, languages=None, start_id=0, **kwargs):
+        '''Print a list summarizing indexed repositories.'''
+        msg('Summarizing indexed GitHub repositories.')
+        filter = {}
+        if start_id > 0:
+            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            filter['_id'] = {'$gt': start_id}
+        if languages:
+            msg('Limiting output to entries having languages', languages)
+            filter.update(self.language_query(languages))
         fields = ['owner', 'name', '_id', 'languages']
         msg('-'*79)
         for entry in self.entry_list(filter or targets, fields=fields):
@@ -880,7 +886,7 @@ class GitHubIndexer():
         return None
 
 
-    def add_languages(self, targets=None, **kwargs):
+    def add_languages(self, targets=None, start_id=0, **kwargs):
         def body_function(entry):
             t1 = time()
             (found, method, langs, fork, desc) = self.get_languages(entry)
@@ -933,15 +939,19 @@ class GitHubIndexer():
                         self.update_fork_field(entry, '', '')
                 self.update_field(entry, 'is_visible', True)
 
+        msg('Gathering language data for repositories.')
         # Set up deafult selection criteria when not using 'targets'.
         selected_repos = {'languages': {"$eq" : []}, 'is_deleted': False,
                           'is_visible': {"$ne" : False}}
+        if start_id > 0:
+            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            selected_repos['_id'] = {'$gt': start_id}
         # And let's do it.
         self.loop(self.entry_list, body_function, selected_repos, targets)
 
 
     def add_readmes(self, targets=None, languages=None, prefer_http=False,
-                    api_only=False, force=False, **kwargs):
+                    api_only=False, start_id=0, force=False, **kwargs):
         def body_function(entry):
             if entry['is_visible'] == False:
                 # See note at the end of the parent function (add_readmes).
@@ -1002,12 +1012,17 @@ class GitHubIndexer():
         # It makes no sense to me, and I don't understand what's going on.
         # To be safer, I removed the check against visibility here, and added
         # an explicit test in body_function() above.
-        if not force:
-            selected_repos = {'readme': '', 'is_deleted': False}
-        else:
+        msg('Gathering README files for repositories.')
+        selected_repos = {'is_deleted': False}
+        if start_id > 0:
+            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            selected_repos['_id'] = {'$gt': start_id}
+        if force:
             # "Force" in this context means get readmes even if we previously
-            # tried to get them.
-            selected_repos = {'readme': {'$in': ['', -1]}, 'is_deleted': False}
+            # tried to get them, which is indicated by a -1 value.
+            selected_repos['readme'] = {'$in': ['', -1]}
+        else:
+            selected_repos['readme'] = ''
 
         # And let's do it.
         self.loop(self.entry_list, body_function, selected_repos, targets)
@@ -1045,6 +1060,9 @@ class GitHubIndexer():
                 # We have an entry already, but we're not doing an update.
                 msg('*** Skipping existing entry {}'.format(e_summary(thing)))
 
+        msg('Indexing GitHub repositories.')
+        if overwrite:
+            msg('Overwriting existing data.')
         total = humanize.intcomma(self.db.count())
         msg('Database has {} total GitHub entries.'.format(total))
         if targets:
