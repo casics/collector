@@ -82,7 +82,8 @@ def main(acct=None, api_only=False, index_create=False, index_recreate=False,
          file=None, force=False, prefer_http=False, id=None,
          lang=None, index_langs=False, print_details=False, print_stats=False,
          index_readmes=False, print_summary=False, print_ids=False,
-         update=False, list_deleted=False, delete=False, *repos):
+         index_verify=False, update=False, list_deleted=False, delete=False,
+         *repos):
     '''Generate or print index of projects found in repositories.'''
 
     def convert(arg):
@@ -97,7 +98,7 @@ def main(acct=None, api_only=False, index_create=False, index_recreate=False,
         repos = [convert(x) for x in repos]
     elif file:
         with open(file) as f:
-            repos = f.read().splitlines()
+            repos = f.read().strip().splitlines()
             if len(repos) > 0 and repos[0].isdigit():
                 repos = [int(x) for x in repos]
 
@@ -112,6 +113,7 @@ def main(acct=None, api_only=False, index_create=False, index_recreate=False,
     elif index_recreate:  call('recreate_index',    login=acct, **args)
     elif index_langs:     call('add_languages',     login=acct, **args)
     elif index_readmes:   call('add_readmes',       login=acct, **args)
+    elif index_verify :   call('verify_index',      login=acct, **args)
     elif delete:          call('mark_deleted',      login=acct, **args)
     elif list_deleted:    call('list_deleted',      login=acct, **args)
     elif update:          call('update_entries',    login=acct, **args)
@@ -204,6 +206,7 @@ main.__annotations__ = dict(
     print_summary   = ('print list of indexed repositories'   ,       'flag',   's'),
     print_ids       = ('print all known repository id numbers',       'flag',   'S'),
     update          = ('update specific entries by querying GitHub',  'flag',   'u'),
+    index_verify    = ('verify, but do not change, basic index data', 'flag',   'v'),
     list_deleted    = ('list deleted entries',                        'flag',   'x'),
     delete          = ('mark specific entries as deleted',            'flag',   'X'),
     repos           = 'one or more repository identifiers or names',
