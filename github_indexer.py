@@ -401,6 +401,9 @@ class GitHubIndexer():
         entry['time']['repo_pushed']    = canonicalize_timestamp(repo.pushed_at)
         entry['time']['data_refreshed'] = now_timestamp()
 
+        if repo.size == 0:
+           entry['content_type'] = 'empty'
+
         self.update_entry(entry)
 
 
@@ -416,6 +419,7 @@ class GitHubIndexer():
             fork_of = repo.parent.full_name if repo.parent else ''
             fork_root = repo.source.full_name if repo.source else ''
             languages = [{'name': repo.language}] if repo.language else []
+            content_type = 'empty' if repo.size == 0 else ''
             entry = repo_entry(id=repo.id,
                                name=repo.name,
                                owner=repo.owner.login,
@@ -423,6 +427,7 @@ class GitHubIndexer():
                                languages=languages,
                                default_branch=repo.default_branch,
                                homepage=repo.homepage,
+                               content_type=content_type,
                                is_deleted=False,
                                is_visible=not repo.private,
                                is_fork=repo.fork,
