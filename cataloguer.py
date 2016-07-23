@@ -82,8 +82,8 @@ def main(acct=None, api_only=False, index_create=False, index_recreate=False,
          file=None, force=False, prefer_http=False, id=None,
          lang=None, index_langs=False, print_details=False, print_stats=False,
          index_readmes=False, print_summary=False, print_ids=False,
-         index_verify=False, update=False, list_deleted=False, delete=False,
-         *repos):
+         index_verify=False, update=False, infer_type=False,
+         list_deleted=False, delete=False, *repos):
     '''Generate or print index of projects found in repositories.'''
 
     def convert(arg):
@@ -117,6 +117,7 @@ def main(acct=None, api_only=False, index_create=False, index_recreate=False,
     elif delete:          call('mark_deleted',      login=acct, **args)
     elif list_deleted:    call('list_deleted',      login=acct, **args)
     elif update:          call('update_entries',    login=acct, **args)
+    elif infer_type:      call('infer_type',        login=acct, **args)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
@@ -206,6 +207,7 @@ main.__annotations__ = dict(
     print_summary   = ('print list of indexed repositories'   ,       'flag',   's'),
     print_ids       = ('print all known repository id numbers',       'flag',   'S'),
     update          = ('update specific entries by querying GitHub',  'flag',   'u'),
+    infer_type      = ('try to guess if repos contain noncode',       'flag',   't'),
     index_verify    = ('verify, but do not change, basic index data', 'flag',   'v'),
     list_deleted    = ('list deleted entries',                        'flag',   'x'),
     delete          = ('mark specific entries as deleted',            'flag',   'X'),
