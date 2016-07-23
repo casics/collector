@@ -401,9 +401,10 @@ class GitHubIndexer():
         entry['time']['repo_pushed']    = canonicalize_timestamp(repo.pushed_at)
         entry['time']['data_refreshed'] = now_timestamp()
 
-        if repo.size == 0:
-            entry['content_type'] = 'empty'
-        elif repo.size > 0 and entry['content_type'] == '':
+        # Turns out we can't trust the value returned by GitHub: if it's 0,
+        # the repo is often *not* actually empty.  So all we can do is record
+        # when we find it's not 0.
+        if repo.size > 0 and entry['content_type'] == '':
             # Only set this if we didn't know anything at all before, so that we
             # don't blow away a value we may have already found some other way.
             entry['content_type'] = 'nonempty'
@@ -423,7 +424,7 @@ class GitHubIndexer():
             fork_of = repo.parent.full_name if repo.parent else ''
             fork_root = repo.source.full_name if repo.source else ''
             languages = [{'name': repo.language}] if repo.language else []
-            content_type = 'empty' if repo.size == 0 else 'nonempty'
+            content_type = 'nonempty' if repo.size > 0 else ''
             entry = repo_entry(id=repo.id,
                                name=repo.name,
                                owner=repo.owner.login,
