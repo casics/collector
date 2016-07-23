@@ -1218,6 +1218,21 @@ class GitHubIndexer():
         msg('Database has {} entries with README files.'.format(have_readmes))
 
 
+    def summarize_types(self, targets=None):
+        no_content_type = self.db.find({'content_type': ''}).count()
+        no_content_type = humanize.intcomma(no_content_type)
+        are_empty = self.db.find({'content_type': 'empty'}).count()
+        are_empty = humanize.intcomma(are_empty)
+        are_nonempty = self.db.find({'content_type': 'nonempty'}).count()
+        are_nonempty = humanize.intcomma(are_nonempty)
+        are_noncode = self.db.find({'content_type': 'noncode'}).count()
+        are_noncode = humanize.intcomma(are_noncode)
+        msg('{} entries without content_type.'.format(no_content_type))
+        msg('{} repos believed to be empty.'.format(are_empty))
+        msg('{} repos believed to be nonempty.'.format(are_nonempty))
+        msg('{} repos believed to be noncode.'.format(are_noncode))
+
+
     def list_deleted(self, targets=None, **kwargs):
         msg('-'*79)
         msg("The following entries have 'is_deleted' = True:")
@@ -1239,6 +1254,7 @@ class GitHubIndexer():
         else:
             msg('*** no entries ***')
             return
+        self.summarize_types()
         self.summarize_readme_stats()
         self.summarize_language_stats()
 
@@ -1294,6 +1310,7 @@ class GitHubIndexer():
             else:
                 fork_status = 'No'
             msg('FORK:'.ljust(width), fork_status)
+            msg('CONTENT TYPE:'.ljust(width), entry['content_type'])
             msg('VISIBLE:'.ljust(width), 'Yes' if entry['is_visible'] else 'No')
             msg('DELETED:'.ljust(width), 'Yes' if entry['is_deleted'] else 'No')
             msg('CREATED:'.ljust(width), timestamp_str(entry['time']['repo_created']))
@@ -1381,6 +1398,16 @@ class GitHubIndexer():
             return None
 
 
+    def extract_empty_from_html(self, html):
+        if not html:
+            return False
+        else:
+            # This is not fool-proof.  Someone could actually have this text
+            # in a README file.  The probability is low, but....
+            text = '<h3>This repository is empty.</h3>'
+            return html.find(text) > 0
+
+
     def get_languages(self, entry):
         # First try to get it by scraping the HTTP web page for the project.
         # This saves an API call.
@@ -1456,6 +1483,38 @@ class GitHubIndexer():
         # Here we do direct access to bring it to 1 api call.
         url = 'https://api.github.com/repos/{}/readme'.format(e_path(entry))
         return ('api', self.direct_api_call(url))
+
+
+    def check_empty(self, entry, prefer_http=False, api_only=False):
+        # Returns tuple (method, tested, empty), where 'tested' is True if we
+        # actually found the repo (as opposed to meeting an error of some
+        # kind) and 'empty' is True if empty, False if not.
+
+        if not api_only:
+            (code, html) = self.get_home_page(entry)
+            if code in [404, 451]:
+                # 404 = doesn't exist.  451 = unavailable for legal reasons.
+                # Don't bother try to get it via API either.
+                return ('http', False, True)
+            if html:
+                return ('http', True, self.extract_empty_from_html(html))
+
+        # If we get here and we're only doing HTTP, then we're done.
+        if prefer_http:
+            return ('http', False, True)
+
+        # Resort to GitHub API call.
+        # This approach is from http://stackoverflow.com/a/33400770/743730
+        url = 'https://api.github.com/repos/{}/{}/stats/contributors'.format(
+            entry['owner'], entry['name'])
+        response = self.direct_api_call(url)
+        if isinstance(response, int) and response >= 400:
+            return ('api', False, True)
+        elif response == None:
+            return ('api', False, True)
+        else:
+            # In case of empty repos, you get status 204: no content.
+            return ('api', True, response.status != 204)
 
 
     def get_fork_info(self, entry):
@@ -1737,7 +1796,14 @@ class GitHubIndexer():
                     # Create whole new entry for the new id.
                     (is_new, entry) = self.add_entry_from_github3(repo, True)
 
-                if entry and entry['is_visible']:
+                if not entry or not entry['is_visible']:
+                    return
+                if entry['content_type'] == '':
+                    (method, tested, empty) = self.check_empty(entry, prefer_http)
+                    if tested and empty:
+                        msg('{} is an empty repo'.format(e_summary(entry)))
+                        self.update_field(entry, 'content_type', 'empty')
+                if entry['content_type'] != 'empty':
                     # Try to get the readme.
                     try:
                         (method, readme) = self.get_readme(entry, prefer_http, False)
