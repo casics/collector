@@ -1800,9 +1800,12 @@ class GitHubIndexer():
                     return
                 if entry['content_type'] == '':
                     (method, tested, empty) = self.check_empty(entry, prefer_http)
-                    if tested and empty:
-                        msg('{} is an empty repo'.format(e_summary(entry)))
-                        self.update_field(entry, 'content_type', 'empty')
+                    if tested:
+                        if empty:
+                            msg('{} found empty via {}'.format(e_summary(entry), method))
+                            self.update_field(entry, 'content_type', 'empty')
+                        else:
+                            self.update_field(entry, 'content_type', 'nonempty')
                 if entry['content_type'] != 'empty':
                     # Try to get the readme.
                     try:
@@ -1842,13 +1845,22 @@ class GitHubIndexer():
 
         def body_function(entry):
             t1 = time()
-            if entry['content_type'] == 'empty':
+            if entry['content_type'] == '':
+                (method, tested, empty) = self.check_empty(entry, prefer_http)
+                if tested:
+                    if empty:
+                        msg('{} found empty via {}'.format(e_summary(entry), method))
+                        self.update_field(entry, 'content_type', 'empty')
+                        return
+                    else:
+                        self.update_field(entry, 'content_type', 'nonempty')
+            elif entry['content_type'] == 'empty':
                 msg('*** {} believed to be empty -- skipping'.format(e_summary(entry)))
                 return
+
             if entry['languages'] == '' or entry['languages'] == -1:
                 msg('*** no languages for {} -- skipping'.format(e_summary(entry)))
                 return
-
             if believe_noncode(entry):
                 msg('{} inferred to be noncode'.format(e_summary(entry)))
                 self.update_field(entry, 'content_type', 'noncode')
