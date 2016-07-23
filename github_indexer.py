@@ -402,11 +402,11 @@ class GitHubIndexer():
         entry['time']['data_refreshed'] = now_timestamp()
 
         if repo.size == 0:
-           entry['content_type'] = 'empty'
-       elif repo.size > 0 and entry['content_type'] == '':
-           # Only set this if we didn't know anything at all before, so that we
-           # don't blow away a value we may have already found some other way.
-           entry['content_type'] = 'nonempty'
+            entry['content_type'] = 'empty'
+        elif repo.size > 0 and entry['content_type'] == '':
+            # Only set this if we didn't know anything at all before, so that we
+            # don't blow away a value we may have already found some other way.
+            entry['content_type'] = 'nonempty'
 
         self.update_entry(entry)
 
