@@ -677,6 +677,12 @@ class DirectAPIException(Exception):
         super(DirectAPIException, self).__init__(message)
         self.code = code
 
+
+class UnexpectedResponseException(Exception):
+    def __init__(self, message, code):
+        super(DirectAPIException, self).__init__(message)
+        self.code = code
+
 
 # Main class.
 # .............................................................................
@@ -1390,6 +1396,35 @@ class GitHubIndexer():
         return languages
 
 
+    def extract_files_from_html(self, html, entry):
+        empty_marker = '<h3>This repository is empty.</h3>'
+        if not html:
+            return (False, [])
+        elif html.find(empty_marker) > 0:
+            return (True, [])
+        else:
+            import ipdb; ipdb.set_trace()
+            owner = entry['owner']
+            name = entry['name']
+            startmarker = '/file-list/'
+            startpoint = html.find(marker)
+            if startpoint <= 0:
+                return (False, None)
+            startpoint = startpoint + len(startpoint)
+            branch = html[startpoint : html.find('"', startpoint)]
+            subsection = html[startpoint : html.find('</include-fragment')]
+            base       = '/' + owner + '/' + name
+            filestart  = base + '/blob/' + branch + '/'
+            dirstart   = base + '/tree/' + branch + '/'
+            nextstart  = subsection.find(base)
+            files      = []
+            while nextstart > 0:
+                endpoint = subsection.find('"', nextstart)
+                files.append(subsection[nextstart : endpoint])
+                subsection = subsection[endpoint :]
+            return files
+
+
     def extract_fork_from_html(self, html):
         if not html:
             return False
@@ -1430,7 +1465,7 @@ class GitHubIndexer():
             return False
         else:
             # This is not fool-proof.  Someone could actually have this text
-            # in a README file.  The probability is low, but....
+            # literally inside a README file.  The probability is low, but....
             text = '<h3>This repository is empty.</h3>'
             return html.find(text) > 0
 
@@ -1910,11 +1945,16 @@ class GitHubIndexer():
             base     = 'https://api.github.com/repos/' + e_path(entry)
             url      = base + '/git/trees/' + branch
             response = self.direct_api_call(url)
-            if isinstance(response, int) and response >= 400:
-                # direct_api_call reports error responses; no need to say more.
-                pass
-            elif response == None:
+            if response == None:
                 msg('*** No response for {} -- skipping'.format(e_summary(entry)))
+            elif isinstance(response, int) and response in [403, 451]:
+                # We hit the rate limit or a problem.  Bubble it up to loop().
+                raise DirectAPIException('Getting files', response)
+            elif isinstance(response, int) and response >= 400:
+                # We got a code over 400, but not for things like API limits.
+                # The repo might have been renamed, deleted, made private, or
+                # it might have no files.  FIXME: use api to get branch name.
+                get_files_via_http(entry)
             else:
                 results = json.loads(response)
                 if 'message' in results and results['message'] == 'Not Found':
@@ -1927,6 +1967,29 @@ class GitHubIndexer():
                     msg('added {} files for {}'.format(len(files), e_summary(entry)))
                 else:
                     import ipdb; ipdb.set_trace()
+
+        def get_files_via_http(entry):
+            (code, html) = self.get_home_page(entry)
+            if code in [404, 451]:
+                # 404 = not found. 451 = unavailable for legal reasons.
+                self.update_field(entry, 'is_visible', False)
+                msg('*** {} no longer visible'.format(e_summary(entry)))
+            elif code >= 400:
+                # We got a code over 400, but we don't know why.
+                raise UnexpectedResponseException('Getting files', code)
+            elif html:
+                (empty, files) = self.extract_files_from_html(html, entry)
+                if empty:
+                    msg('{} appears empty via http'.format(e_summary(entry)))
+                    self.update_field(entry, 'content_type', 'empty')
+                elif files:
+                    self.update_field(entry, 'files', files)
+                    self.update_field(entry, 'content_type', 'nonempty')
+                    msg('added {} files for {}'.format(len(files), e_summary(entry)))
+                else:
+                    msg('*** failed to get files for {}'.format(e_summary(entry)))
+            else:
+                import ipdb; ipdb.set_trace()
 
         def get_files_via_svn(entry):
             # SVN is not bound by same API rate limits, but is much slower.
@@ -1970,19 +2033,15 @@ class GitHubIndexer():
             return files
 
         def body_function(entry):
-            t1 = time()
             if entry['content_type'] == 'empty' and not force:
                 msg('*** {} believed to be empty -- skipping'.format(e_summary(entry)))
                 return
             elif entry['files'] and not force:
                 msg('*** {} already has a files list -- skipping'.format(e_summary(entry)))
                 return
-            if api_only:
-                get_files_via_api(entry)
-            elif prefer_http:
-                get_files_via_http(entry)
-            else:
-                get_files_via_svn(entry)
+            if api_only:      get_files_via_api(entry)
+            elif prefer_http: get_files_via_http(entry)
+            else:             get_files_via_svn(entry)
 
         def iterator(targets, start_id):
             fields = ['files', 'content_type', 'default_branch',
