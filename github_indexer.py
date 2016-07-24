@@ -1238,6 +1238,12 @@ class GitHubIndexer():
         msg('Database has {} entries with README files.'.format(have_readmes))
 
 
+    def summarize_files(self, targets=None):
+        with_files = self.db.find({'files': {'$ne': []}}).count()
+        with_files = humanize.intcomma(with_files)
+        msg('{} entries contain lists of files.'.format(with_files))
+
+
     def summarize_types(self, targets=None):
         no_content_type = self.db.find({'content_type': ''}).count()
         no_content_type = humanize.intcomma(no_content_type)
@@ -1250,7 +1256,7 @@ class GitHubIndexer():
         msg('{} entries without content_type.'.format(no_content_type))
         msg('{} repos believed to be empty.'.format(are_empty))
         msg('{} repos believed to be nonempty.'.format(are_nonempty))
-        msg('{} repos believed to be noncode.'.format(are_noncode))
+        msg('{} repos believed to be other than code.'.format(are_noncode))
 
 
     def list_deleted(self, targets=None, **kwargs):
@@ -1274,6 +1280,7 @@ class GitHubIndexer():
         else:
             msg('*** no entries ***')
             return
+        self.summarize_files()
         self.summarize_types()
         self.summarize_readme_stats()
         self.summarize_language_stats()
@@ -1894,22 +1901,40 @@ class GitHubIndexer():
         self.loop(self.entry_list, body_function, selected_repos, targets, start_id)
 
 
-    def update_files(self, targets=None, prefer_http=False, overwrite=False,
-                     force=False, start_id=None, **kwargs):
+    def update_files(self, targets=None, api_only=False, prefer_http=False,
+                     overwrite=False, force=False, start_id=None, **kwargs):
 
-        def body_function(entry):
-            t1 = time()
-            if entry['content_type'] == 'empty' and not force:
-                msg('*** {} believed to be empty -- skipping'.format(e_summary(entry)))
-                return
-            elif entry['files'] and not force:
-                msg('*** {} already has a files list -- skipping'.format(e_summary(entry)))
-                return
+        def get_files_via_api(entry):
+            # Using the API is faster, but you're limited to 5000 calls/hr.
+            branch   = 'master' if not entry['default_branch'] else entry['default_branch']
+            base     = 'https://api.github.com/repos/' + e_path(entry)
+            url      = base + '/git/trees/' + branch
+            response = self.direct_api_call(url)
+            if isinstance(response, int) and response >= 400:
+                # direct_api_call reports error responses; no need to say more.
+                pass
+            elif response == None:
+                msg('*** No response for {} -- skipping'.format(e_summary(entry)))
+            else:
+                results = json.loads(response)
+                if 'message' in results and results['message'] == 'Not Found':
+                    msg('*** {} not found -- skipping'.format(e_summary(entry)))
+                    return
+                elif 'tree' in results:
+                    files = files_from_api(results['tree'])
+                    self.update_field(entry, 'files', files)
+                    self.update_field(entry, 'content_type', 'nonempty')
+                    msg('added {} files for {}'.format(len(files), e_summary(entry)))
+                else:
+                    import ipdb; ipdb.set_trace()
+
+        def get_files_via_svn(entry):
+            # SVN is not bound by same API rate limits, but is much slower.
             if not entry['default_branch'] or entry['default_branch'] == 'master':
                 branch = '/trunk'
             else:
                 branch = '/branches/' + entry['default_branch']
-            path = 'https://github.com/' + entry['owner'] + '/' + entry['name'] + branch
+            path = 'https://github.com/' + e_path(entry) + branch
             try:
                 (code, output, err) = shell_cmd(['svn', 'ls', path])
             except Exception as ex:
@@ -1929,6 +1954,35 @@ class GitHubIndexer():
                 self.update_field(entry, 'content_type', 'empty')
             else:
                 msg('*** Error for {}: {}'.format(e_summary(entry), err))
+
+        def files_from_api(json_tree):
+            files = []
+            for thing in json_tree:
+                if thing['type'] == 'blob':
+                    files.append(thing['path'])
+                elif thing['type'] == 'tree':
+                    files.append(thing['path'] + '/')
+                elif thing['type'] == 'commit':
+                    # These are submodules.  Treat as subdirectories for our purposes.
+                    files.append(thing['path'] + '/')
+                else:
+                    import ipdb; ipdb.set_trace()
+            return files
+
+        def body_function(entry):
+            t1 = time()
+            if entry['content_type'] == 'empty' and not force:
+                msg('*** {} believed to be empty -- skipping'.format(e_summary(entry)))
+                return
+            elif entry['files'] and not force:
+                msg('*** {} already has a files list -- skipping'.format(e_summary(entry)))
+                return
+            if api_only:
+                get_files_via_api(entry)
+            elif prefer_http:
+                get_files_via_http(entry)
+            else:
+                get_files_via_svn(entry)
 
         def iterator(targets, start_id):
             fields = ['files', 'content_type', 'default_branch',
