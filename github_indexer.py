@@ -1913,7 +1913,7 @@ class GitHubIndexer():
             try:
                 (code, output, err) = shell_cmd(['svn', 'ls', path])
             except Exception as ex:
-                msg('*** Error for {}: {}'.format(e_summary(entry)), ex)
+                msg('*** Error for {}: {}'.format(e_summary(entry), ex))
                 return
             if code == 0:
                 if output:
@@ -1924,11 +1924,11 @@ class GitHubIndexer():
                     msg('added {} files for {}'.format(len(files), e_summary(entry)))
                 else:
                     msg('*** no result for {}'.format(e_summary(entry)))
-            elif code == 1 and err.decode('utf-8').find('non-existent') > 1:
+            elif code == 1 and err.find('non-existent') > 1:
                 msg('{} found empty'.format(e_summary(entry)))
                 self.update_field(entry, 'content_type', 'empty')
             else:
-                msg('*** Error for {}: {}'.format(e_summary(entry)), err)
+                msg('*** Error for {}: {}'.format(e_summary(entry), err))
 
         def iterator(targets, start_id):
             fields = ['files', 'content_type', 'default_branch',
@@ -1936,7 +1936,12 @@ class GitHubIndexer():
             return self.entry_list(targets, fields, start_id)
 
         # And let's do it.
-        selected_repos = {'is_deleted': False, 'is_visible': True}
+        if force:
+            selected_repos = {'is_deleted': False, 'is_visible': True}
+        else:
+            # If we're not forcing re-getting the files, don't return results that
+            # already have files data.
+            selected_repos = {'is_deleted': False, 'is_visible': True, 'files': []}
         if start_id > 0:
             msg('Skipping GitHub id\'s less than {}'.format(start_id))
             selected_repos['_id'] = {'$gte': start_id}
