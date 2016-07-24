@@ -1403,26 +1403,64 @@ class GitHubIndexer():
         elif html.find(empty_marker) > 0:
             return (True, [])
         else:
-            import ipdb; ipdb.set_trace()
             owner = entry['owner']
             name = entry['name']
-            startmarker = '/file-list/'
-            startpoint = html.find(marker)
-            if startpoint <= 0:
+            startmarker = '"file-wrap"'
+            startpoint = html.find(startmarker)
+            if startpoint < 0:
                 return (False, None)
-            startpoint = startpoint + len(startpoint)
-            branch = html[startpoint : html.find('"', startpoint)]
-            subsection = html[startpoint : html.find('</include-fragment')]
-            base       = '/' + owner + '/' + name
-            filestart  = base + '/blob/' + branch + '/'
-            dirstart   = base + '/tree/' + branch + '/'
-            nextstart  = subsection.find(base)
-            files      = []
-            while nextstart > 0:
-                endpoint = subsection.find('"', nextstart)
-                files.append(subsection[nextstart : endpoint])
-                subsection = subsection[endpoint :]
-            return files
+            nextstart = html.find('<table', startpoint + len(startmarker))
+            base      = '/' + owner + '/' + name
+            filepat   = base + '/blob/'
+            dirpat    = base + '/tree/'
+            found_file   = html.find(filepat, nextstart)
+            found_dir    = html.find(dirpat, nextstart)
+            if found_file < 0 and found_dir < 0:
+                return (False, None)
+            nextstart = min([v for v in [found_file, found_dir] if v > -1])
+            if nextstart >= 0:
+                branch_start = nextstart + len(base) + 6
+                branch_end = html.find('/', branch_start)
+                branch = html[branch_start : branch_end]
+            else:
+                return (False, None)
+            section   = html[nextstart : html.find('</table', nextstart)]
+            # Update patterns now that we know the branch
+            filepat       = filepat + branch + '/'
+            filepat_len   = len(filepat)
+            dirpat        = dirpat + branch + '/'
+            dirpat_len    = len(dirpat)
+            # Now look inside the section were files are found.
+            found_file   = section.find(filepat)
+            found_dir    = section.find(dirpat)
+            nextstart = min([v for v in [found_file, found_dir] if v > -1])
+            files = []
+            while nextstart >= 0:
+                endpoint = section.find('"', nextstart)
+                whole = section[nextstart : endpoint]
+                if whole.find(filepat) > -1:
+                    files.append(whole[filepat_len :])
+                elif whole.find(dirpat) > -1:
+                    path = whole[dirpat_len :]
+                    if path.find('/') > 0:
+                        # It's a submodule.  Some of the other methods we use
+                        # don't distinguish submodules from directories in the
+                        # file lists, so we have to follow suit here for
+                        # consistency: treat it like a directory.
+                        endname = path[path.rfind('/') + 1:]
+                        files.append(endname + '/')
+                    else:
+                        files.append(path + '/')
+                else:
+                    import ipdb; ipdb.set_trace()
+                section = section[endpoint :]
+                found_file   = section.find(filepat)
+                found_dir    = section.find(dirpat)
+                if found_file < 0 and found_dir < 0:
+                    break
+                else:
+                    nextstart = min([v for v in [found_file, found_dir] if v > -1])
+            return (False, files)
 
 
     def extract_fork_from_html(self, html):
@@ -1987,7 +2025,10 @@ class GitHubIndexer():
                     self.update_field(entry, 'content_type', 'nonempty')
                     msg('added {} files for {}'.format(len(files), e_summary(entry)))
                 else:
-                    msg('*** failed to get files for {}'.format(e_summary(entry)))
+                    # Something went wrong. Maybe the repository has been
+                    # renamed and getting the http page now fails, etc.
+                    msg('*** problem getting files for nonempty repo {}'.format(
+                        e_summary(entry)))
             else:
                 import ipdb; ipdb.set_trace()
 
@@ -2036,7 +2077,13 @@ class GitHubIndexer():
             if entry['content_type'] == 'empty' and not force:
                 msg('*** {} believed to be empty -- skipping'.format(e_summary(entry)))
                 return
-            elif entry['files'] and not force:
+            if entry['is_visible'] == False and not force:
+                msg('*** {} believed to not visible -- skipping'.format(e_summary(entry)))
+                return
+            if entry['is_deleted'] == True and not force:
+                msg('*** {} believed to be deleted -- skipping'.format(e_summary(entry)))
+                return
+            if entry['files'] and not force:
                 msg('*** {} already has a files list -- skipping'.format(e_summary(entry)))
                 return
             if api_only:      get_files_via_api(entry)
@@ -2044,8 +2091,8 @@ class GitHubIndexer():
             else:             get_files_via_svn(entry)
 
         def iterator(targets, start_id):
-            fields = ['files', 'content_type', 'default_branch',
-                      'owner', 'name', 'time', '_id']
+            fields = ['files', 'content_type', 'default_branch', 'is_visible',
+                      'is_deleted', 'owner', 'name', 'time', '_id']
             return self.entry_list(targets, fields, start_id)
 
         # And let's do it.
@@ -2054,8 +2101,10 @@ class GitHubIndexer():
         else:
             # If we're not forcing re-getting the files, don't return results that
             # already have files data.
-            selected_repos = {'is_deleted': False, 'is_visible': True, 'files': []}
+            selected_repos = {'is_deleted': False, 'is_visible': True,
+                              'files': [], 'content_type': {'$ne': 'empty'}}
         if start_id > 0:
             msg('Skipping GitHub id\'s less than {}'.format(start_id))
             selected_repos['_id'] = {'$gte': start_id}
+        # Note: the selector only has effect when targets are not explicit.
         self.loop(iterator, body_function, selected_repos, targets, start_id)
