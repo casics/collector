@@ -68,7 +68,8 @@ def msg_bad(thing):
 
 
 def shell_cmd(args):
-    proc = Popen(args, stdout=PIPE, stderr=PIPE)
+    proc = Popen(args, stdout=PIPE, stderr=PIPE, stdin=PIPE)
+    proc.stdin.write('\n'.encode())
     out, err = proc.communicate()
     exitcode = proc.returncode
     return exitcode, out, err
