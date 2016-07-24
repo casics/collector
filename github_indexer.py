@@ -24,6 +24,7 @@ import socket
 from base64 import b64encode
 from datetime import datetime
 from subprocess import PIPE, DEVNULL, Popen
+from threading import Timer
 from time import time, sleep
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../common"))
@@ -67,11 +68,21 @@ def msg_bad(thing):
         msg('*** unrecognize type of thing: "{}" ***'.format(thing))
 
 
-def shell_cmd(args):
+def shell_cmd(args, max_time=5):
+    # 'max_time' is in sec.
+    # Based in part on http://stackoverflow.com/a/10768774/743730
+
+    def kill_proc(proc, timeout):
+        timeout['value'] = True
+        proc.kill()
+
     proc = Popen(args, stdout=PIPE, stderr=PIPE, stdin=PIPE, preexec_fn=os.setsid)
-    out, err = proc.communicate()
-    exitcode = proc.returncode
-    return exitcode, out, err
+    timeout = {'value': False}
+    timer = Timer(max_time, kill_proc, [proc, timeout])
+    timer.start()
+    stdout, stderr = proc.communicate()
+    timer.cancel()
+    return proc.returncode, stdout.decode("utf-8"), stderr.decode("utf-8")
 
 
 # Based on http://stackoverflow.com/a/14491059/743730
@@ -1906,7 +1917,7 @@ class GitHubIndexer():
                 return
             if code == 0:
                 if output:
-                    files = output.decode('utf-8').split('\n')
+                    files = output.split('\n')
                     files = [f for f in files if f]  # Remove empty strings.
                     self.update_field(entry, 'files', files)
                     self.update_field(entry, 'content_type', 'nonempty')
