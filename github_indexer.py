@@ -1862,6 +1862,7 @@ class GitHubIndexer():
                         self.update_field(entry, 'content_type', 'empty')
                         return
                     else:
+                        msg('{} found nonempty via {}'.format(e_summary(entry), method))
                         self.update_field(entry, 'content_type', 'nonempty')
             elif entry['content_type'] == 'empty':
                 msg('*** {} believed to be empty -- skipping'.format(e_summary(entry)))
@@ -1918,9 +1919,14 @@ class GitHubIndexer():
             else:
                 msg('*** Error for {}: {}'.format(e_summary(entry)), err)
 
+        def iterator(targets, start_id):
+            fields = ['files', 'content_type', 'default_branch',
+                      'owner', 'name', 'time', '_id']
+            return self.entry_list(targets, fields, start_id)
+
         # And let's do it.
         selected_repos = {'is_deleted': False, 'is_visible': True}
         if start_id > 0:
             msg('Skipping GitHub id\'s less than {}'.format(start_id))
             selected_repos['_id'] = {'$gte': start_id}
-        self.loop(self.entry_list, body_function, selected_repos, targets, start_id)
+        self.loop(iterator, body_function, selected_repos, targets, start_id)
