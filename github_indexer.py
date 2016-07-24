@@ -23,7 +23,7 @@ import humanize
 import socket
 from base64 import b64encode
 from datetime import datetime
-from subprocess import PIPE, Popen
+from subprocess import PIPE, DEVNULL, Popen
 from time import time, sleep
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../common"))
@@ -68,8 +68,7 @@ def msg_bad(thing):
 
 
 def shell_cmd(args):
-    proc = Popen(args, stdout=PIPE, stderr=PIPE, stdin=PIPE)
-    proc.stdin.write('\n'.encode())
+    proc = Popen(args, stdout=PIPE, stderr=PIPE, stdin=PIPE, preexec_fn=os.setsid)
     out, err = proc.communicate()
     exitcode = proc.returncode
     return exitcode, out, err
@@ -1899,13 +1898,20 @@ class GitHubIndexer():
             else:
                 branch = '/branches/' + entry['default_branch']
             path = 'https://github.com/' + entry['owner'] + '/' + entry['name'] + branch
-            (code, output, err) = shell_cmd(['svn', 'ls', path])
+            try:
+                (code, output, err) = shell_cmd(['svn', 'ls', path])
+            except Exception as ex:
+                msg('*** Error for {}: {}'.format(e_summary(entry)), ex)
+                return
             if code == 0:
-                files = output.decode('utf-8').split('\n')
-                files = [f for f in files if f]  # Remove empty strings.
-                self.update_field(entry, 'files', files)
-                self.update_field(entry, 'content_type', 'nonempty')
-                msg('added {} files for {}'.format(len(files), e_summary(entry)))
+                if output:
+                    files = output.decode('utf-8').split('\n')
+                    files = [f for f in files if f]  # Remove empty strings.
+                    self.update_field(entry, 'files', files)
+                    self.update_field(entry, 'content_type', 'nonempty')
+                    msg('added {} files for {}'.format(len(files), e_summary(entry)))
+                else:
+                    msg('*** no result for {}'.format(e_summary(entry)))
             elif code == 1 and err.decode('utf-8').find('non-existent') > 1:
                 msg('{} found empty'.format(e_summary(entry)))
                 self.update_field(entry, 'content_type', 'empty')
