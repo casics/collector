@@ -79,7 +79,7 @@ from github_indexer import GitHubIndexer
 # of the arguments to main().
 
 def main(acct=None, api_only=False, index_create=False, index_recreate=False,
-         file=None, force=False, prefer_http=False, id=None,
+         file=None, force=False, get_files=False, prefer_http=False, id=None,
          lang=None, index_langs=False, print_details=False, print_stats=False,
          index_readmes=False, print_summary=False, print_ids=False,
          index_verify=False, update=False, infer_type=False,
@@ -118,6 +118,7 @@ def main(acct=None, api_only=False, index_create=False, index_recreate=False,
     elif list_deleted:    call('list_deleted',      login=acct, **args)
     elif update:          call('update_entries',    login=acct, **args)
     elif infer_type:      call('infer_type',        login=acct, **args)
+    elif get_files:       call('update_files',      login=acct, **args)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
@@ -197,6 +198,7 @@ main.__annotations__ = dict(
     index_recreate  = ('re-gather basic index data',                  'flag',   'C'),
     file            = ('get repo names or identifiers from file',     'option', 'f'),
     force           = ('get info even if we know we already tried',   'flag',   'F'),
+    get_files       = ('get list of top-level files for repos',       'flag',   'g'),
     prefer_http     = ('prefer HTTP without using API, if possible',  'flag'  , 'H'),
     id              = ('start iterations with this GitHub id',        'option', 'I'),
     lang            = ('limit printing to specific languages',        'option', 'L'),

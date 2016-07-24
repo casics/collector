@@ -23,6 +23,7 @@ import humanize
 import socket
 from base64 import b64encode
 from datetime import datetime
+from subprocess import PIPE, Popen
 from time import time, sleep
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../common"))
@@ -64,6 +65,14 @@ def msg_bad(thing):
         msg('*** {} not an id or an "owner/name" string ***'.format(thing))
     else:
         msg('*** unrecognize type of thing: "{}" ***'.format(thing))
+
+
+def shell_cmd(args):
+    proc = Popen(args, stdout=PIPE, stderr=PIPE)
+    out, err = proc.communicate()
+    exitcode = proc.returncode
+    return exitcode, out, err
+
 
 # Based on http://stackoverflow.com/a/14491059/743730
 def flatten(the_list):
@@ -1864,6 +1873,43 @@ class GitHubIndexer():
             if believe_noncode(entry):
                 msg('{} inferred to be noncode'.format(e_summary(entry)))
                 self.update_field(entry, 'content_type', 'noncode')
+
+        # And let's do it.
+        selected_repos = {'is_deleted': False, 'is_visible': True}
+        if start_id > 0:
+            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            selected_repos['_id'] = {'$gte': start_id}
+        self.loop(self.entry_list, body_function, selected_repos, targets, start_id)
+
+
+    def update_files(self, targets=None, prefer_http=False, overwrite=False,
+                     force=False, start_id=None, **kwargs):
+
+        def body_function(entry):
+            t1 = time()
+            if entry['content_type'] == 'empty' and not force:
+                msg('*** {} believed to be empty -- skipping'.format(e_summary(entry)))
+                return
+            elif entry['files'] and not force:
+                msg('*** {} already has a files list -- skipping'.format(e_summary(entry)))
+                return
+            if not entry['default_branch'] or entry['default_branch'] == 'master':
+                branch = '/trunk'
+            else:
+                branch = '/branches/' + entry['default_branch']
+            path = 'https://github.com/' + entry['owner'] + '/' + entry['name'] + branch
+            (code, output, err) = shell_cmd(['svn', 'ls', path])
+            if code == 0:
+                files = output.decode('utf-8').split('\n')
+                files = [f for f in files if f]  # Remove empty strings.
+                self.update_field(entry, 'files', files)
+                self.update_field(entry, 'content_type', 'nonempty')
+                msg('added {} files for {}'.format(len(files), e_summary(entry)))
+            elif code == 1 and err.decode('utf-8').find('non-existent') > 1:
+                msg('{} found empty'.format(e_summary(entry)))
+                self.update_field(entry, 'content_type', 'empty')
+            else:
+                msg('*** Error for {}: {}'.format(e_summary(entry)), err)
 
         # And let's do it.
         selected_repos = {'is_deleted': False, 'is_visible': True}
