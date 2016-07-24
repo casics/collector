@@ -1452,7 +1452,8 @@ class GitHubIndexer():
                     else:
                         files.append(path + '/')
                 else:
-                    import ipdb; ipdb.set_trace()
+                    # Something is inconsistent. Bail for now.
+                    return (False, None)
                 section = section[endpoint :]
                 found_file   = section.find(filepat)
                 found_dir    = section.find(dirpat)
