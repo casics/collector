@@ -680,7 +680,7 @@ class DirectAPIException(Exception):
 
 class UnexpectedResponseException(Exception):
     def __init__(self, message, code):
-        super(DirectAPIException, self).__init__(message)
+        super(UnexpectedResponseException, self).__init__(message)
         self.code = code
 
 
