@@ -1398,17 +1398,42 @@ class GitHubIndexer():
 
     def extract_files_from_html(self, html, entry):
         empty_marker = '<h3>This repository is empty.</h3>'
+        owner = entry['owner']
+        name = entry['name']
         if not html:
-            return (False, [])
+            return (False, [], owner, name)
         elif html.find(empty_marker) > 0:
-            return (True, [])
+            return (True, [], owner, name)
         else:
-            owner = entry['owner']
-            name = entry['name']
             startmarker = '"file-wrap"'
             startpoint = html.find(startmarker)
             if startpoint < 0:
-                return (False, None)
+                return (False, None, owner, name)
+
+            # If the repo has been renamed, we may have gotten here using an
+            # name.  First try to get the current name.
+            #
+            # Note: there seem to be 2 forms of the HTML for the file list:
+            # 1.  <div class="file-wrap">
+            #       <a href="/owner/name/tree/sha..."
+            #
+            # 2.  <include-fragment class="file-wrap" src="/owner/name/file-list/master">
+
+            if html[startpoint - 11 : startpoint] == '<div class=':
+                url_start = html.find('<a href="/', startpoint)
+                url_end   = html.find('"', url_start + 10)
+                url       = html[url_start + 10 : url_end]
+                owner     = url[: url.find('/')]
+                slash     = len(owner) + 1
+                name      = url[slash : url.find('/', slash)]
+            elif html[startpoint - 24 : startpoint] == '<include-fragment class=':
+                line_end  = html.find('>', startpoint)
+                url_start = html.find('src="/', startpoint, line_end)
+                url       = html[url_start + 6 : line_end]
+                owner     = url[: url.find('/')]
+                slash     = len(owner) + 1
+                name      = url[slash : url.find('/', slash)]
+
             nextstart = html.find('<table', startpoint + len(startmarker))
             base      = '/' + owner + '/' + name
             filepat   = base + '/blob/'
@@ -1416,14 +1441,14 @@ class GitHubIndexer():
             found_file   = html.find(filepat, nextstart)
             found_dir    = html.find(dirpat, nextstart)
             if found_file < 0 and found_dir < 0:
-                return (False, None)
+                return (True, None, owner, name)
             nextstart = min([v for v in [found_file, found_dir] if v > -1])
             if nextstart >= 0:
                 branch_start = nextstart + len(base) + 6
                 branch_end = html.find('/', branch_start)
                 branch = html[branch_start : branch_end]
             else:
-                return (False, None)
+                return (False, None, owner, name)
             section   = html[nextstart : html.find('</table', nextstart)]
             # Update patterns now that we know the branch
             filepat       = filepat + branch + '/'
@@ -1453,7 +1478,7 @@ class GitHubIndexer():
                         files.append(path + '/')
                 else:
                     # Something is inconsistent. Bail for now.
-                    return (False, None)
+                    return (False, None, owner, name)
                 section = section[endpoint :]
                 found_file   = section.find(filepat)
                 found_dir    = section.find(dirpat)
@@ -1461,7 +1486,7 @@ class GitHubIndexer():
                     break
                 else:
                     nextstart = min([v for v in [found_file, found_dir] if v > -1])
-            return (False, files)
+            return (False, files, owner, name)
 
 
     def extract_fork_from_html(self, html):
@@ -2017,7 +2042,14 @@ class GitHubIndexer():
                 # We got a code over 400, but we don't know why.
                 raise UnexpectedResponseException('Getting files', code)
             elif html:
-                (empty, files) = self.extract_files_from_html(html, entry)
+                (empty, files, owner, name) = self.extract_files_from_html(html, entry)
+                if owner != entry['owner']:
+                    msg('{} owner changed to {}'.format(e_summary(entry), owner))
+                    self.update_field(entry, 'owner', owner)
+                elif name != entry['name']:
+                    msg('{} repo name changed to {}'.format(e_summary(entry), name))
+                    self.update_field(entry, 'name', name)
+
                 if empty:
                     msg('{} appears empty via http'.format(e_summary(entry)))
                     self.update_field(entry, 'content_type', 'empty')
