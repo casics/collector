@@ -2075,18 +2075,17 @@ class GitHubIndexer():
             return files
 
         def body_function(entry):
-            if entry['content_type'] == 'empty' and not force:
-                msg('*** {} believed to be empty -- skipping'.format(e_summary(entry)))
-                return
-            if entry['is_visible'] == False and not force:
-                msg('*** {} believed to not visible -- skipping'.format(e_summary(entry)))
-                return
-            if entry['is_deleted'] == True and not force:
-                msg('*** {} believed to be deleted -- skipping'.format(e_summary(entry)))
-                return
-            if entry['files'] and not force:
-                msg('*** {} already has a files list -- skipping'.format(e_summary(entry)))
-                return
+            if not force:
+                info = e_summary(entry)
+                if entry['files']:
+                    msg('*** {} has a files list -- skipping'.format(info))
+                    return
+                if entry['content_type'] == 'empty':
+                    msg('*** {} believed to be empty -- skipping'.format(info))
+                    return
+                if entry['is_visible'] == False or entry['is_deleted'] == True:
+                    msg('*** {} believed to be unavialable -- skipping'.format(info))
+                    return
             if api_only:      get_files_via_api(entry)
             elif prefer_http: get_files_via_http(entry)
             else:             get_files_via_svn(entry)
