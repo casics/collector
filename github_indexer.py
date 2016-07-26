@@ -2116,7 +2116,7 @@ class GitHubIndexer():
                     msg('*** {} believed to be empty -- skipping'.format(info))
                     return
                 if entry['is_visible'] == False or entry['is_deleted'] == True:
-                    msg('*** {} believed to be unavialable -- skipping'.format(info))
+                    msg('*** {} believed to be unavailable -- skipping'.format(info))
                     return
             if api_only:      get_files_via_api(entry)
             elif prefer_http: get_files_via_http(entry)
