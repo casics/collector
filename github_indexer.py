@@ -1297,16 +1297,19 @@ class GitHubIndexer():
     def summarize_types(self, targets=None):
         no_content_type = self.db.find({'content_type': ''}).count()
         no_content_type = humanize.intcomma(no_content_type)
+        msg('{} entries without content_type.'.format(no_content_type))
         are_empty = self.db.find({'content_type': 'empty'}).count()
         are_empty = humanize.intcomma(are_empty)
+        msg('{} repos believed to be empty.'.format(are_empty))
         are_nonempty = self.db.find({'content_type': 'nonempty'}).count()
         are_nonempty = humanize.intcomma(are_nonempty)
+        msg('{} repos believed to be nonempty.'.format(are_nonempty))
+        are_code = self.db.find({'content_type': 'code'}).count()
+        are_code = humanize.intcomma(are_code)
+        msg('{} repos believed to contain code.'.format(are_code))
         are_noncode = self.db.find({'content_type': 'noncode'}).count()
         are_noncode = humanize.intcomma(are_noncode)
-        msg('{} entries without content_type.'.format(no_content_type))
-        msg('{} repos believed to be empty.'.format(are_empty))
-        msg('{} repos believed to be nonempty.'.format(are_nonempty))
-        msg('{} repos believed to be other than code.'.format(are_noncode))
+        msg('{} repos believed not to contain code.'.format(are_noncode))
 
 
     def list_deleted(self, targets=None, **kwargs):
