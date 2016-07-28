@@ -643,9 +643,10 @@ def known_code_lang(lang):
 
 code_files = [
     'build.xml',
-    'pom.xml',
-    'makefile',
+    'capfile',
     'gemfile',
+    'makefile',
+    'pom.xml',
     'rakefile',
 ]
 
