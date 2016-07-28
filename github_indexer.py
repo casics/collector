@@ -95,551 +95,592 @@ def flatten(the_list):
 
 # Code to normalize language names.
 # List came from our first database approach to cataloging github repos.
-lang_names = [
-    "ABAP",
-    "ABC",
-    "AGS Script",
-    "AMPL",
-    "ANTLR",
-    "API Blueprint",
-    "APL",
-    "ASP",
-    "ATLAS",
-    "ATS",
-    "ActionScript",
-    "Ada",
-    "Agda",
-    "AgilentVEE",
-    "Algol",
-    "Alice",
-    "Alloy",
-    "Angelscript",
-    "Ant Build System",
-    "ApacheConf",
-    "Apex",
-    "AppleScript",
-    "Arc",
-    "Arduino",
-    "AsciiDoc",
-    "AspectJ",
-    "Assembly",
-    "Augeas",
-    "AutoHotkey",
-    "AutoIt",
-    "AutoLISP",
-    "Automator",
-    "Avenue",
-    "Awk",
-    "BASIC",
-    "BCPL",
-    "BETA",
-    "Bash",
-    "Batchfile",
-    "BeanShell",
-    "Befunge",
-    "Bison",
-    "BitBake",
-    "BlitzBasic",
-    "BlitzMax",
-    "Bluespec",
-    "Boo",
-    "BourneShell",
-    "Brainfuck",
-    "Brightscript",
-    "Bro",
-    "C",
-    "C#",
-    "C++",
-    "C-ObjDump",
-    "C2hs Haskell",
-    "CFML",
-    "CHILL",
-    "CIL",
-    "CIL",
-    "CLIPS",
-    "CLU",
-    "CMake",
-    "CMake",
-    "COBOL",
-    "COMAL",
-    "COmega",
-    "CPL",
-    "CSS",
-    "CShell",
-    "Caml",
-    "Cap&#39;n Proto",
-    "Cap'n Proto",
-    "CartoCSS",
-    "Ceylon",
-    "Ch",
-    "Chapel",
-    "Charity",
-    "Chef",
-    "ChucK",
-    "Cirru",
-    "Clarion",
-    "Clean",
-    "Clipper",
-    "Clojure",
-    "Cobra",
-    "CoffeeScript",
-    "ColdFusion CFC",
-    "ColdFusion",
-    "Common Lisp",
-    "Component Pascal",
-    "Cool",
-    "Coq",
-    "Cpp-ObjDump",
-    "Creole",
-    "Crystal",
-    "Cucumber",
-    "Cuda",
-    "Curl",
-    "Cycript",
-    "Cython",
-    "D",
-    "D-ObjDump",
-    "DCL",
-    "DCPU-16 ASM",
-    "DCPU16ASM",
-    "DIGITAL Command Language",
-    "DM",
-    "DNS Zone",
-    "DOT",
-    "DTrace",
-    "DTrace",
-    "Darcs Patch",
-    "Dart",
-    "Delphi",
-    "DiBOL",
-    "Diff",
-    "Dockerfile",
-    "Dogescript",
-    "Dylan",
-    "E",
-    "ECL",
-    "ECLiPSe",
-    "ECMAScript",
-    "EGL",
-    "EPL",
-    "EXEC",
-    "Eagle",
-    "Ecere Projects",
-    "Ecl",
-    "Eiffel",
-    "Elixir",
-    "Elm",
-    "Emacs Lisp",
-    "EmberScript",
-    "Erlang",
-    "Escher",
-    "Etoys",
-    "Euclid",
-    "Euphoria",
-    "F#",
-    "FLUX",
-    "FORTRAN",
-    "Factor",
-    "Falcon",
-    "Fancy",
-    "Fantom",
-    "Felix",
-    "Filterscript",
-    "Formatted",
-    "Forth",
-    "Fortress",
-    "FourthDimension 4D",
-    "FreeMarker",
-    "Frege",
-    "G-code",
-    "GAMS",
-    "GAP",
-    "GAP",
-    "GAS",
-    "GDScript",
-    "GLSL",
-    "GNU Octave",
-    "Gambas",
-    "Game Maker Language",
-    "Genshi",
-    "Gentoo Ebuild",
-    "Gentoo Eclass",
-    "Gettext Catalog",
-    "Glyph",
-    "Gnuplot",
-    "Go",
-    "Golo",
-    "GoogleAppsScript",
-    "Gosu",
-    "Grace",
-    "Gradle",
-    "Grammatical Framework",
-    "Graph Modeling Language",
-    "Graphviz (DOT)",
-    "Groff",
-    "Groovy Server Pages",
-    "Groovy",
-    "HCL",
-    "HPL",
-    "HTML",
-    "HTML+Django",
-    "HTML+EEX",
-    "HTML+ERB",
-    "HTML+PHP",
-    "HTTP",
-    "Hack",
-    "Haml",
-    "Handlebars",
-    "Harbour",
-    "Haskell",
-    "Haxe",
-    "Haxe",
-    "Heron",
-    "Hy",
-    "HyPhy",
-    "HyperTalk",
-    "IDL",
-    "IGOR Pro",
-    "INI",
-    "INTERCAL",
-    "IRC log",
-    "Icon",
-    "Idris",
-    "Inform 7",
-    "Inform",
-    "Informix 4GL",
-    "Inno Setup",
-    "Io",
-    "Ioke",
-    "Isabelle ROOT",
-    "Isabelle",
-    "J",
-    "J#",
-    "JADE",
-    "JFlex",
-    "JSON",
-    "JSON5",
-    "JSONLD",
-    "JSONiq",
-    "JSX",
-    "JScript",
-    "JScript.NET",
-    "Jade",
-    "Jasmin",
-    "Java Server Pages",
-    "Java",
-    "JavaFXScript",
-    "JavaScript",
-    "Julia",
-    "Jupyter Notebook",
-    "KRL",
-    "KiCad",
-    "Kit",
-    "KornShell",
-    "Kotlin",
-    "LFE",
-    "LLVM",
-    "LOLCODE",
-    "LPC",
-    "LSL",
-    "LaTeX",
-    "LabVIEW",
-    "LadderLogic",
-    "Lasso",
-    "Latte",
-    "Lean",
-    "Less",
-    "Lex",
-    "LilyPond",
-    "Limbo",
-    "Lingo",
-    "Linker Script",
-    "Linux Kernel Module",
-    "Liquid",
-    "Lisp",
-    "Literate Agda",
-    "Literate CoffeeScript",
-    "Literate Haskell",
-    "LiveScript",
-    "Logo",
-    "Logos",
-    "Logtalk",
-    "LookML",
-    "LoomScript",
-    "LotusScript",
-    "Lua",
-    "Lucid",
-    "Lustre",
-    "M",
-    "M4",
-    "MAD",
-    "MANTIS",
-    "MAXScript",
-    "MDL",
-    "MEL",
-    "ML",
-    "MOO",
-    "MSDOSBatch",
-    "MTML",
-    "MUF",
-    "MUMPS",
-    "Magic",
-    "Magik",
-    "Makefile",
-    "Mako",
-    "Malbolge",
-    "Maple",
-    "Markdown",
-    "Mask",
-    "Mathematica",
-    "Matlab",
-    "Maven POM",
-    "Max",
-    "MaxMSP",
-    "MediaWiki",
-    "Mercury",
-    "Metal",
-    "MiniD",
-    "Mirah",
-    "Miva",
-    "Modelica",
-    "Modula-2",
-    "Modula-3",
-    "Module Management System",
-    "Monkey",
-    "Moocode",
-    "MoonScript",
-    "Moto",
-    "Myghty",
-    "NATURAL",
-    "NCL",
-    "NL",
-    "NQC",
-    "NSIS",
-    "NXTG",
-    "Nemerle",
-    "NetLinx",
-    "NetLinx+ERB",
-    "NetLogo",
-    "NewLisp",
-    "Nginx",
-    "Nimrod",
-    "Ninja",
-    "Nit",
-    "Nix",
-    "Nu",
-    "Nu",
-    "NumPy",
-    "OCaml",
-    "OPL",
-    "Oberon",
-    "ObjDump",
-    "Object Rexx",
-    "Objective-C",
-    "Objective-C++",
-    "Objective-J",
-    "Occam",
-    "Omgrofl",
-    "Opa",
-    "Opal",
-    "OpenCL",
-    "OpenEdge ABL",
-    "OpenEdgeABL",
-    "OpenSCAD",
-    "Org",
-    "Ox",
-    "Oxygene",
-    "Oz",
-    "PAWN",
-    "PHP",
-    "PILOT",
-    "PLI",
-    "PLSQL",
-    "PLpgSQL",
-    "POVRay",
-    "Pan",
-    "Papyrus",
-    "Paradox",
-    "Parrot Assembly",
-    "Parrot Internal Representation",
-    "Parrot",
-    "Pascal",
-    "Perl",
-    "Perl6",
-    "PicoLisp",
-    "PigLatin",
-    "Pike",
-    "Pliant",
-    "Pod",
-    "PogoScript",
-    "PostScript",
-    "PowerBasic",
-    "PowerScript",
-    "PowerShell",
-    "Processing",
-    "Prolog",
-    "Propeller Spin",
-    "Protocol Buffer",
-    "Public Key",
-    "Puppet",
-    "Pure Data",
-    "PureBasic",
-    "PureData",
-    "PureScript",
-    "Python traceback",
-    "Python",
-    "Q",
-    "QML",
-    "QMake",
-    "R",
-    "RAML",
-    "RDoc",
-    "REALbasic",
-    "REALbasicDuplicate",
-    "REBOL",
-    "REXX",
-    "RHTML",
-    "RMarkdown",
-    "RPGOS400",
-    "Racket",
-    "Ragel in Ruby Host",
-    "Ratfor",
-    "Raw token data",
-    "Rebol",
-    "Red",
-    "Redcode",
-    "RenderScript",
-    "Revolution",
-    "RobotFramework",
-    "Rouge",
-    "Ruby",
-    "Rust",
-    "S",
-    "SAS",
-    "SCSS",
-    "SIGNAL",
-    "SMT",
-    "SPARK",
-    "SPARQL",
-    "SPLUS",
-    "SPSS",
-    "SQF",
-    "SQL",
-    "SQLPL",
-    "SQR",
-    "STON",
-    "SVG",
-    "Sage",
-    "SaltStack",
-    "Sass",
-    "Sather",
-    "Scala",
-    "Scaml",
-    "Scheme",
-    "Scilab",
-    "Scratch",
-    "Seed7",
-    "Self",
-    "Shell",
-    "ShellSession",
-    "Shen",
-    "Simula",
-    "Simulink",
-    "Slash",
-    "Slate",
-    "Slim",
-    "Smali",
-    "Smalltalk",
-    "Smarty",
-    "SourcePawn",
-    "Squeak",
-    "Squirrel",
-    "Standard ML",
-    "Stata",
-    "Stylus",
-    "Suneido",
-    "SuperCollider",
-    "Swift",
-    "SystemVerilog",
-    "TACL",
-    "TOM",
-    "TOML",
-    "TXL",
-    "Tcl",
-    "Tcsh",
-    "TeX",
-    "Tea",
-    "Text",
-    "Textile",
-    "Thrift",
-    "Transact-SQL",
-    "Turing",
-    "Turtle",
-    "Twig",
-    "TypeScript",
-    "Unified Parallel C",
-    "Unity3D Asset",
-    "UnrealScript",
-    "VBScript",
-    "VCL",
-    "VHDL",
-    "Vala",
-    "Verilog",
-    "VimL",
-    "Visual Basic",
-    "Visual Basic.NET",
-    "Visual Fortran",
-    "Visual FoxPro",
-    "Volt",
-    "Vue",
-    "Web Ontology Language",
-    "WebDNA",
-    "WebIDL",
-    "Whitespace",
-    "Wolfram Language",
-    "X10",
-    "XBase++",
-    "XC",
-    "XML",
-    "XPL",
-    "XPages",
-    "XProc",
-    "XQuery",
-    "XS",
-    "XSLT",
-    "Xen",
-    "Xojo",
-    "Xtend",
-    "YAML",
-    "Yacc",
-    "Yorick",
-    "Zephir",
-    "Zimpl",
-    "Zshell",
-    "bc",
-    "cT",
-    "cg",
-    "dBase",
-    "desktop",
-    "eC",
-    "edn",
-    "fish",
-    "haXe",
-    "ksh",
-    "mupad",
-    "nesC",
-    "ooc",
-    "reStructuredText",
-    "sed",
-    "thinBasic",
-    "wisp",
-    "xBase",
-    "Other",
-]
-language_map = {name.lower() : name for name in lang_names}
+lang_names = {
+    # Lang name: is it for code?}
+    "ABAP"                           : True,
+    "ABC"                            : True,
+    "AGS Script"                     : True,
+    "AMPL"                           : True,
+    "ANTLR"                          : True,
+    "API Blueprint"                  : True,
+    "APL"                            : True,
+    "ASP"                            : True,
+    "ATLAS"                          : True,
+    "ATS"                            : True,
+    "ActionScript"                   : True,
+    "Ada"                            : True,
+    "Agda"                           : True,
+    "AgilentVEE"                     : True,
+    "Algol"                          : True,
+    "Alice"                          : True,
+    "Alloy"                          : True,
+    "Angelscript"                    : True,
+    "Ant Build System"               : True,
+    "ApacheConf"                     : True,
+    "Apex"                           : True,
+    "AppleScript"                    : True,
+    "Arc"                            : True,
+    "Arduino"                        : True,
+    "AsciiDoc"                       : False,
+    "AspectJ"                        : True,
+    "Assembly"                       : True,
+    "Augeas"                         : True,
+    "AutoHotkey"                     : True,
+    "AutoIt"                         : True,
+    "AutoLISP"                       : True,
+    "Automator"                      : True,
+    "Avenue"                         : True,
+    "Awk"                            : True,
+    "BASIC"                          : True,
+    "BCPL"                           : True,
+    "BETA"                           : True,
+    "Bash"                           : True,
+    "Batchfile"                      : True,
+    "BeanShell"                      : True,
+    "Befunge"                        : True,
+    "Bison"                          : True,
+    "BitBake"                        : True,
+    "BlitzBasic"                     : True,
+    "BlitzMax"                       : True,
+    "Bluespec"                       : True,
+    "Boo"                            : True,
+    "BourneShell"                    : True,
+    "Brainfuck"                      : True,
+    "Brightscript"                   : True,
+    "Bro"                            : True,
+    "C"                              : True,
+    "C#"                             : True,
+    "C++"                            : True,
+    "C-ObjDump"                      : True,
+    "C2hs Haskell"                   : True,
+    "CFML"                           : True,
+    "CHILL"                          : True,
+    "CIL"                            : True,
+    "CLIPS"                          : True,
+    "CLU"                            : True,
+    "CMake"                          : True,
+    "COBOL"                          : True,
+    "COMAL"                          : True,
+    "COmega"                         : True,
+    "CPL"                            : True,
+    "CSS"                            : True,
+    "CShell"                         : True,
+    "Caml"                           : True,
+    "Cap&#39;n Proto"                : True,
+    "Cap'n Proto"                    : True,
+    "CartoCSS"                       : True,
+    "Ceylon"                         : True,
+    "Ch"                             : True,
+    "Chapel"                         : True,
+    "Charity"                        : True,
+    "Chef"                           : True,
+    "ChucK"                          : True,
+    "Cirru"                          : True,
+    "Clarion"                        : True,
+    "Clean"                          : True,
+    "Clipper"                        : True,
+    "Clojure"                        : True,
+    "Cobra"                          : True,
+    "CoffeeScript"                   : True,
+    "ColdFusion CFC"                 : True,
+    "ColdFusion"                     : True,
+    "Common Lisp"                    : True,
+    "Component Pascal"               : True,
+    "Cool"                           : True,
+    "Coq"                            : True,
+    "Cpp-ObjDump"                    : True,
+    "Creole"                         : True,
+    "Crystal"                        : True,
+    "Cucumber"                       : True,
+    "Cuda"                           : True,
+    "Curl"                           : True,
+    "Cycript"                        : True,
+    "Cython"                         : True,
+    "D"                              : True,
+    "D-ObjDump"                      : True,
+    "DCL"                            : True,
+    "DCPU-16 ASM"                    : True,
+    "DCPU16ASM"                      : True,
+    "DIGITAL Command Language"       : True,
+    "DM"                             : True,
+    "DNS Zone"                       : True,
+    "DOT"                            : True,
+    "DTrace"                         : True,
+    "Darcs Patch"                    : True,
+    "Dart"                           : True,
+    "Delphi"                         : True,
+    "DiBOL"                          : True,
+    "Diff"                           : True,
+    "Dockerfile"                     : True,
+    "Dogescript"                     : True,
+    "Dylan"                          : True,
+    "E"                              : True,
+    "ECL"                            : True,
+    "ECLiPSe"                        : True,
+    "ECMAScript"                     : True,
+    "EGL"                            : True,
+    "EPL"                            : True,
+    "EXEC"                           : True,
+    "Eagle"                          : True,
+    "Ecere Projects"                 : True,
+    "Ecl"                            : True,
+    "Eiffel"                         : True,
+    "Elixir"                         : True,
+    "Elm"                            : True,
+    "Emacs Lisp"                     : True,
+    "EmberScript"                    : True,
+    "Erlang"                         : True,
+    "Escher"                         : True,
+    "Etoys"                          : True,
+    "Euclid"                         : True,
+    "Euphoria"                       : True,
+    "F#"                             : True,
+    "FLUX"                           : True,
+    "FORTRAN"                        : True,
+    "Factor"                         : True,
+    "Falcon"                         : True,
+    "Fancy"                          : True,
+    "Fantom"                         : True,
+    "Felix"                          : True,
+    "Filterscript"                   : True,
+    "Formatted"                      : False,
+    "Forth"                          : True,
+    "Fortress"                       : True,
+    "FourthDimension 4D"             : True,
+    "FreeMarker"                     : True,
+    "Frege"                          : True,
+    "G-code"                         : True,
+    "GAMS"                           : True,
+    "GAP"                            : True,
+    "GAS"                            : True,
+    "GDScript"                       : True,
+    "GLSL"                           : True,
+    "GNU Octave"                     : True,
+    "Gambas"                         : True,
+    "Game Maker Language"            : True,
+    "Genshi"                         : True,
+    "Gentoo Ebuild"                  : True,
+    "Gentoo Eclass"                  : True,
+    "Gettext Catalog"                : True,
+    "Glyph"                          : True,
+    "Gnuplot"                        : True,
+    "Go"                             : True,
+    "Golo"                           : True,
+    "GoogleAppsScript"               : True,
+    "Gosu"                           : True,
+    "Grace"                          : True,
+    "Gradle"                         : True,
+    "Grammatical Framework"          : False,
+    "Graph Modeling Language"        : True,
+    "Graphviz DOT"                   : True,
+    "Groff"                          : False,
+    "Groovy Server Pages"            : True,
+    "Groovy"                         : True,
+    "HCL"                            : True,
+    "HPL"                            : True,
+    "HTML"                           : False,
+    "HTML+Django"                    : True,
+    "HTML+EEX"                       : True,
+    "HTML+ERB"                       : True,
+    "HTML+PHP"                       : True,
+    "HTTP"                           : True,
+    "Hack"                           : True,
+    "Haml"                           : True,
+    "Handlebars"                     : True,
+    "Harbour"                        : True,
+    "Haskell"                        : True,
+    "Haxe"                           : True,
+    "Heron"                          : True,
+    "Hy"                             : True,
+    "HyPhy"                          : True,
+    "HyperTalk"                      : True,
+    "IDL"                            : True,
+    "IGOR Pro"                       : True,
+    "INI"                            : True,
+    "INTERCAL"                       : True,
+    "IRC log"                        : True,
+    "Icon"                           : True,
+    "Idris"                          : True,
+    "Inform 7"                       : True,
+    "Inform"                         : True,
+    "Informix 4GL"                   : True,
+    "Inno Setup"                     : True,
+    "Io"                             : True,
+    "Ioke"                           : True,
+    "Isabelle ROOT"                  : True,
+    "Isabelle"                       : True,
+    "J"                              : True,
+    "J#"                             : True,
+    "JADE"                           : True,
+    "JFlex"                          : True,
+    "JSON"                           : False,
+    "JSON5"                          : False,
+    "JSONLD"                         : False,
+    "JSONiq"                         : False,
+    "JSX"                            : True,
+    "JScript"                        : True,
+    "JScript.NET"                    : True,
+    "Jade"                           : True,
+    "Jasmin"                         : True,
+    "Java Server Pages"              : True,
+    "Java"                           : True,
+    "JavaFXScript"                   : True,
+    "JavaScript"                     : True,
+    "Julia"                          : True,
+    "Jupyter Notebook"               : False,
+    "KRL"                            : True,
+    "KiCad"                          : True,
+    "Kit"                            : True,
+    "KornShell"                      : True,
+    "Kotlin"                         : True,
+    "LFE"                            : True,
+    "LLVM"                           : True,
+    "LOLCODE"                        : True,
+    "LPC"                            : True,
+    "LSL"                            : True,
+    "LaTeX"                          : False,
+    "LabVIEW"                        : True,
+    "LadderLogic"                    : True,
+    "Lasso"                          : True,
+    "Latte"                          : True,
+    "Lean"                           : True,
+    "Less"                           : True,
+    "Lex"                            : True,
+    "LilyPond"                       : True,
+    "Limbo"                          : True,
+    "Lingo"                          : True,
+    "Linker Script"                  : True,
+    "Linux Kernel Module"            : True,
+    "Liquid"                         : True,
+    "Lisp"                           : True,
+    "Literate Agda"                  : True,
+    "Literate CoffeeScript"          : True,
+    "Literate Haskell"               : True,
+    "LiveScript"                     : True,
+    "Logo"                           : True,
+    "Logos"                          : True,
+    "Logtalk"                        : True,
+    "LookML"                         : True,
+    "LoomScript"                     : True,
+    "LotusScript"                    : True,
+    "Lua"                            : True,
+    "Lucid"                          : True,
+    "Lustre"                         : True,
+    "M"                              : True,
+    "M4"                             : True,
+    "MAD"                            : True,
+    "MANTIS"                         : True,
+    "MAXScript"                      : True,
+    "MDL"                            : True,
+    "MEL"                            : True,
+    "ML"                             : True,
+    "MOO"                            : True,
+    "MSDOSBatch"                     : True,
+    "MTML"                           : True,
+    "MUF"                            : True,
+    "MUMPS"                          : True,
+    "Magic"                          : True,
+    "Magik"                          : True,
+    "Makefile"                       : True,
+    "Mako"                           : True,
+    "Malbolge"                       : True,
+    "Maple"                          : True,
+    "Markdown"                       : False,
+    "Mask"                           : True,
+    "Mathematica"                    : True,
+    "Matlab"                         : True,
+    "Maven POM"                      : True,
+    "Max"                            : True,
+    "MaxMSP"                         : True,
+    "MediaWiki"                      : True,
+    "Mercury"                        : True,
+    "Metal"                          : True,
+    "MiniD"                          : True,
+    "Mirah"                          : True,
+    "Miva"                           : True,
+    "Modelica"                       : True,
+    "Modula-2"                       : True,
+    "Modula-3"                       : True,
+    "Module Management System"       : True,
+    "Monkey"                         : True,
+    "Moocode"                        : True,
+    "MoonScript"                     : True,
+    "Moto"                           : True,
+    "Myghty"                         : True,
+    "NATURAL"                        : True,
+    "NCL"                            : True,
+    "NL"                             : True,
+    "NQC"                            : True,
+    "NSIS"                           : True,
+    "NXTG"                           : True,
+    "Nemerle"                        : True,
+    "NetLinx"                        : True,
+    "NetLinx+ERB"                    : True,
+    "NetLogo"                        : True,
+    "NewLisp"                        : True,
+    "Nginx"                          : True,
+    "Nimrod"                         : True,
+    "Ninja"                          : True,
+    "Nit"                            : True,
+    "Nix"                            : True,
+    "Nu"                             : True,
+    "NumPy"                          : True,
+    "OCaml"                          : True,
+    "OPL"                            : True,
+    "Oberon"                         : True,
+    "ObjDump"                        : True,
+    "Object Rexx"                    : True,
+    "Objective-C"                    : True,
+    "Objective-C++"                  : True,
+    "Objective-J"                    : True,
+    "Occam"                          : True,
+    "Omgrofl"                        : True,
+    "Opa"                            : True,
+    "Opal"                           : True,
+    "OpenCL"                         : True,
+    "OpenEdge ABL"                   : True,
+    "OpenEdgeABL"                    : True,
+    "OpenSCAD"                       : True,
+    "Org"                            : True,
+    "Ox"                             : True,
+    "Oxygene"                        : True,
+    "Oz"                             : True,
+    "PAWN"                           : True,
+    "PHP"                            : True,
+    "PILOT"                          : True,
+    "PLI"                            : True,
+    "PLSQL"                          : True,
+    "PLpgSQL"                        : True,
+    "POVRay"                         : True,
+    "Pan"                            : True,
+    "Papyrus"                        : True,
+    "Paradox"                        : True,
+    "Parrot Assembly"                : True,
+    "Parrot Internal Representation" : True,
+    "Parrot"                         : True,
+    "Pascal"                         : True,
+    "Perl"                           : True,
+    "Perl6"                          : True,
+    "PicoLisp"                       : True,
+    "PigLatin"                       : True,
+    "Pike"                           : True,
+    "Pliant"                         : True,
+    "Pod"                            : False,
+    "PogoScript"                     : True,
+    "PostScript"                     : False,
+    "PowerBasic"                     : True,
+    "PowerScript"                    : True,
+    "PowerShell"                     : True,
+    "Processing"                     : True,
+    "Prolog"                         : True,
+    "Propeller Spin"                 : True,
+    "Protocol Buffer"                : True,
+    "Public Key"                     : False,
+    "Puppet"                         : True,
+    "Pure Data"                      : True,
+    "PureBasic"                      : True,
+    "PureData"                       : True,
+    "PureScript"                     : True,
+    "Python traceback"               : True,
+    "Python"                         : True,
+    "Q"                              : True,
+    "QML"                            : True,
+    "QMake"                          : True,
+    "R"                              : True,
+    "RAML"                           : True,
+    "RDoc"                           : False,
+    "REALbasic"                      : True,
+    "REALbasicDuplicate"             : True,
+    "REBOL"                          : True,
+    "REXX"                           : True,
+    "RHTML"                          : True,
+    "RMarkdown"                      : True,
+    "RPGOS400"                       : True,
+    "Racket"                         : True,
+    "Ragel in Ruby Host"             : True,
+    "Ratfor"                         : True,
+    "Raw token data"                 : True,
+    "Rebol"                          : True,
+    "Red"                            : True,
+    "Redcode"                        : True,
+    "RenderScript"                   : True,
+    "Revolution"                     : True,
+    "RobotFramework"                 : True,
+    "Rouge"                          : True,
+    "Ruby"                           : True,
+    "Rust"                           : True,
+    "S"                              : True,
+    "SAS"                            : True,
+    "SCSS"                           : True,
+    "SIGNAL"                         : True,
+    "SMT"                            : True,
+    "SPARK"                          : True,
+    "SPARQL"                         : True,
+    "SPLUS"                          : True,
+    "SPSS"                           : True,
+    "SQF"                            : True,
+    "SQL"                            : True,
+    "SQLPL"                          : True,
+    "SQR"                            : True,
+    "STON"                           : True,
+    "SVG"                            : False,
+    "Sage"                           : True,
+    "SaltStack"                      : True,
+    "Sass"                           : True,
+    "Sather"                         : True,
+    "Scala"                          : True,
+    "Scaml"                          : True,
+    "Scheme"                         : True,
+    "Scilab"                         : True,
+    "Scratch"                        : True,
+    "Seed7"                          : True,
+    "Self"                           : True,
+    "Shell"                          : True,
+    "ShellSession"                   : True,
+    "Shen"                           : True,
+    "Simula"                         : True,
+    "Simulink"                       : True,
+    "Slash"                          : True,
+    "Slate"                          : True,
+    "Slim"                           : True,
+    "Smali"                          : True,
+    "Smalltalk"                      : True,
+    "Smarty"                         : True,
+    "SourcePawn"                     : True,
+    "Squeak"                         : True,
+    "Squirrel"                       : True,
+    "Standard ML"                    : True,
+    "Stata"                          : True,
+    "Stylus"                         : True,
+    "Suneido"                        : True,
+    "SuperCollider"                  : True,
+    "Swift"                          : True,
+    "SystemVerilog"                  : True,
+    "TACL"                           : True,
+    "TOM"                            : True,
+    "TOML"                           : True,
+    "TXL"                            : True,
+    "Tcl"                            : True,
+    "Tcsh"                           : True,
+    "TeX"                            : False,
+    "Tea"                            : True,
+    "Text"                           : True,
+    "Textile"                        : False,
+    "Thrift"                         : True,
+    "Transact-SQL"                   : True,
+    "Turing"                         : True,
+    "Turtle"                         : True,
+    "Twig"                           : True,
+    "TypeScript"                     : True,
+    "Unified Parallel C"             : True,
+    "Unity3D Asset"                  : True,
+    "UnrealScript"                   : True,
+    "VBScript"                       : True,
+    "VCL"                            : True,
+    "VHDL"                           : True,
+    "Vala"                           : True,
+    "Verilog"                        : True,
+    "VimL"                           : True,
+    "Visual Basic"                   : True,
+    "Visual Basic.NET"               : True,
+    "Visual Fortran"                 : True,
+    "Visual FoxPro"                  : True,
+    "Volt"                           : True,
+    "Vue"                            : True,
+    "Web Ontology Language"          : False,
+    "WebDNA"                         : True,
+    "WebIDL"                         : True,
+    "Whitespace"                     : True,
+    "Wolfram Language"               : True,
+    "X10"                            : True,
+    "XBase++"                        : True,
+    "XC"                             : True,
+    "XML"                            : True,
+    "XPL"                            : True,
+    "XPages"                         : True,
+    "XProc"                          : True,
+    "XQuery"                         : True,
+    "XS"                             : True,
+    "XSLT"                           : True,
+    "Xen"                            : True,
+    "Xojo"                           : True,
+    "Xtend"                          : True,
+    "YAML"                           : True,
+    "Yacc"                           : True,
+    "Yorick"                         : True,
+    "Zephir"                         : True,
+    "Zimpl"                          : True,
+    "Zshell"                         : True,
+    "bc"                             : True,
+    "cT"                             : True,
+    "cg"                             : True,
+    "dBase"                          : True,
+    "desktop"                        : True,
+    "eC"                             : True,
+    "edn"                            : True,
+    "fish"                           : True,
+    "haXe"                           : True,
+    "ksh"                            : True,
+    "mupad"                          : True,
+    "nesC"                           : True,
+    "ooc"                            : True,
+    "reStructuredText"               : False,
+    "sed"                            : True,
+    "thinBasic"                      : True,
+    "wisp"                           : True,
+    "xBase"                          : True,
+    "Other"                          : False,
+}
+lang_names_nocase = {k.lower():v for k,v in lang_names.items()}
 
-def canonicalize_lang(lang):
-    return language_map[lang] if lang in language_map else lang
+def known_code_lang(lang):
+    lang = lang.lower()
+    if lang in lang_names_nocase:
+        return lang_names_nocase[lang]
+    else:
+        return False
+
+
+code_files = [
+    'build.xml',
+    'pom.xml',
+    'makefile',
+    'gemfile',
+    'rakefile',
+]
+
+code_file_extensions = [
+    'am',
+    'ac',
+    'c',
+    'class',
+    'cpp',
+    'cs',
+    'h',
+    'in',
+    'java',
+    'js',
+    'jsp',
+    'lua',
+    'm',
+    'mk',
+    'msvc',
+    'pl',
+    'py',
+    'r',
+    'rb',
+    'sh',
+    'swift',
+    'vb',
+    'vcxproj',
+    'xcodeproj/',
+]
+
+def is_code_file(name):
+    return name.lower() in code_files
+
+def has_code_extension(name):
+    return name.split(".")[-1].lower() in code_file_extensions
 
 
 # Utilities for working with our MongoDB contents.
@@ -872,10 +913,11 @@ class GitHubIndexer():
             return (None, None)
 
 
-    def get_github_iterator(self, last_seen=None):
+    def get_github_iterator(self, last_seen=None, start_id=None):
         try:
-            if last_seen:
-                return self.github().iter_all_repos(since=last_seen)
+            if last_seen or start_id:
+                since = last_seen or start_id
+                return self.github().iter_all_repos(since=since)
             else:
                 return self.github().iter_all_repos()
         except Exception as err:
@@ -1569,34 +1611,64 @@ class GitHubIndexer():
     def get_readme(self, entry, prefer_http=False, api_only=False):
         # First try to get it via direct HTTP access, to save on API calls.
         # If that fails and prefer_http != False, we resport to API calls.
-
-        # The direct HTTP access approach simply tries different alternatives
-        # one after the other.  The order is based on the popularity of
-        # README file extensions a determined by the following searches on
-        # GitHub (updated on 2016-05-09):
-        #
-        # filename:README                             = 75,305,118
-        # filename:README.md extension:md             = 58,495,885
-        # filename:README.txt extension:txt           =  4,269,189
-        # filename:README.markdown extension:markdown =  2,618,347
-        # filename:README.rdoc extension:rdoc         =    627,375
-        # filename:README.html                        =    337,131  **
-        # filename:README.rst extension:rst           =    244,631
-        # filename:README.textile extension:textile   =     49,468
-        #
-        # ** (this doesn't appear to be common for top-level readme's.)  I
-        # decided to pick the top 6.  Another note: using concurrency here
-        # doesn't speed things up.  The approach here is to return as soon as
-        # we find a result, which is faster than anything else.
-
         if not api_only:
-            exts = ['', '.md', '.txt', '.markdown', '.rdoc', '.rst']
+            # Do we already have a list of files?  If so, look for the README.
+            readme_file = None
+            for f in entry['files']:
+                # GitHub preferentially shows README.md, and ranks README.txt
+                # below all others.
+                if f == 'README.md':
+                    readme_file = f
+                    break
+                elif f.startswith('README.') and f != 'README.txt':
+                    readme_file = f
+                    break
+                elif f == 'README':
+                    readme_file = f
+                    break
+                elif f == 'README.txt':
+                    readme_file = f
+                    break
             base_url = 'https://raw.githubusercontent.com/' + e_path(entry)
-            for ext in exts:
-                alternative = base_url + '/master/README' + ext
-                r = requests.get(alternative)
+            branch = entry['default_branch'] if entry['default_branch'] else 'master'
+            if readme_file:
+                r = requests.get(base_url + '/' + branch + '/' + readme_file)
                 if r.status_code == 200:
-                    return ('http', r.text)
+                    # Watch out for bad files.  Threshold at 5 MB.
+                    if int(r.headers['content-length']) > 5242880:
+                        return ('http', '')
+                    else:
+                        return ('http', r.text)
+            elif entry['files']:
+                # We have a list of files in the repo, and there's no README.
+                return ('http', None)
+            else:
+                # We don't know repo's files, so we don't know the name of
+                # the README file (if any).  We resort to trying different
+                # alternatives one after the other.  The order is based on
+                # the popularity of README file extensions a determined by
+                # the following searches on GitHub (updated on 2016-05-09):
+                #
+                # filename:README                             = 75,305,118
+                # filename:README.md extension:md             = 58,495,885
+                # filename:README.txt extension:txt           =  4,269,189
+                # filename:README.markdown extension:markdown =  2,618,347
+                # filename:README.rdoc extension:rdoc         =    627,375
+                # filename:README.html                        =    337,131  **
+                # filename:README.rst extension:rst           =    244,631
+                # filename:README.textile extension:textile   =     49,468
+                #
+                # ** (this doesn't appear to be common for top-level readme's.)  I
+                # decided to pick the top 6.  Another note: using concurrency here
+                # doesn't speed things up.  The approach here is to return as soon as
+                # we find a result, which is faster than anything else.
+
+                exts = ['', '.md', '.txt', '.markdown', '.rdoc', '.rst']
+                for ext in exts:
+                    alternative = base_url + '/master/README' + ext
+                    r = requests.get(alternative)
+                    if r.status_code == 200:
+                        return ('http', r.text)
 
         # If we get here and we're only doing HTTP, then we're done.
         if prefer_http:
@@ -1611,17 +1683,19 @@ class GitHubIndexer():
         return ('api', self.direct_api_call(url))
 
 
-    def check_empty(self, entry, prefer_http=False, api_only=False):
+    def check_empty(self, entry, prefer_http=False, api_only=False, html=None):
         # Returns tuple (method, tested, empty), where 'tested' is True if we
         # actually found the repo (as opposed to meeting an error of some
         # kind) and 'empty' is True if empty, False if not.
 
         if not api_only:
-            (code, html) = self.get_home_page(entry)
-            if code in [404, 451]:
-                # 404 = doesn't exist.  451 = unavailable for legal reasons.
-                # Don't bother try to get it via API either.
-                return ('http', False, True)
+            if not html:
+                (code, html) = self.get_home_page(entry)
+                if code in [404, 451]:
+                    # 404 = doesn't exist.  451 = unavailable for legal reasons.
+                    # Don't bother try to get it via API either.
+                    return ('http', False, True)
+            # Do *not* turn this next condition into "else html".
             if html:
                 return ('http', True, self.extract_empty_from_html(html))
 
@@ -1640,7 +1714,7 @@ class GitHubIndexer():
             return ('api', False, True)
         else:
             # In case of empty repos, you get status 204: no content.
-            return ('api', True, response.status != 204)
+            return ('api', True, response != 204)
 
 
     def get_fork_info(self, entry):
@@ -1727,6 +1801,7 @@ class GitHubIndexer():
     def add_readmes(self, targets=None, languages=None, prefer_http=False,
                     api_only=False, start_id=0, force=False, **kwargs):
         def body_function(entry):
+            import ipdb; ipdb.set_trace()
             if entry['is_visible'] == False:
                 # See note at the end of the parent function (add_readmes).
                 return
@@ -1765,7 +1840,7 @@ class GitHubIndexer():
                     # No readme available.  Drop to the -1 case below.
                     pass
 
-            if readme and not isinstance(readme, int):
+            if readme != None and not isinstance(readme, int):
                 t2 = time()
                 msg('{} {} in {:.2f}s via {}'.format(
                     e_summary(entry), len(readme), (t2 - t1), method))
@@ -1874,7 +1949,7 @@ class GitHubIndexer():
 
 
     def verify_index(self, targets=None, prefer_http=False, overwrite=False,
-                     start_id=None, **kwargs):
+                     start_id=None, force=False, **kwargs):
         '''Verify entries against GitHub.  Does not modify anything unless the
         flag 'overwrite' is true.
         '''
@@ -1888,17 +1963,18 @@ class GitHubIndexer():
             else:
                 import ipdb; ipdb.set_trace()
 
-        def body_function(entry):
+        def body_function(thing):
             t1 = time()
-            if entry['is_deleted']:
-                msg('*** {} known to be deleted -- skipping'.format(e_summary(entry)))
-                return
-            if not entry['is_visible']:
-                msg('*** {} known to be not visible -- skipping'.format(e_summary(entry)))
-                return
-            owner = entry['owner']
-            name = entry['name']
-            repo = self.repo_via_api(owner, name)
+            if isinstance(thing, github3.repos.repo.Repository):
+                repo = thing
+                (added, entry) = self.add_entry_from_github3(repo)
+                if added:
+                    msg('Added {}'.format(e_summary(entry)))
+            else:
+                entry = thing
+                owner = entry['owner']
+                name = entry['name']
+                repo = self.repo_via_api(owner, name)
             if not repo:
                 # The repo must have existed at some point because we have it
                 # in our database, but the API no longer returns it for this
@@ -1908,39 +1984,54 @@ class GitHubIndexer():
                 self.update_field(entry, 'is_deleted', True)
                 self.update_field(entry, 'is_visible', False)
                 return
+            if entry['_id'] == repo.id:
+                self.update_entry_from_github3(entry, repo)
+                msg('{} verified'.format(e_summary(entry)))
             else:
-                if entry['_id'] == repo.id:
-                    self.update_entry_from_github3(entry, repo)
-                    msg('{} verified'.format(e_summary(entry)))
-                else:
-                    # Have to delete and recreate the entry to update _id.
-                    msg('*** id changed for {} -- created new entry as #{}'.format(
-                        e_summary(entry), repo.id))
-                    # It existed under this id at one time. Mark it deleted.
-                    self.update_field(entry, 'is_deleted', True)
-                    self.update_field(entry, 'is_visible', False)
-                    # Create whole new entry for the new id.
-                    (is_new, entry) = self.add_entry_from_github3(repo, True)
+                # Have to delete and recreate the entry to update _id.
+                msg('*** id changed for {} -- created new entry as #{}'.format(
+                    e_summary(entry), repo.id))
+                # It existed under this id at one time. Mark it deleted.
+                self.update_field(entry, 'is_deleted', True)
+                self.update_field(entry, 'is_visible', False)
+                # Create whole new entry for the new id.
+                (is_new, entry) = self.add_entry_from_github3(repo, True)
 
-                if not entry or not entry['is_visible']:
+            if not entry or (not entry['is_visible'] and not force):
+                return
+            if entry['content_type'] == '':
+                (code, html) = self.get_home_page(entry)
+                if code in [404, 451]:
                     return
-                if entry['content_type'] == '':
-                    (method, tested, empty) = self.check_empty(entry, prefer_http)
-                    if tested:
-                        if empty:
-                            msg('{} found empty via {}'.format(e_summary(entry), method))
-                            self.update_field(entry, 'content_type', 'empty')
-                        else:
-                            self.update_field(entry, 'content_type', 'nonempty')
+                (method, tested, empty) = self.check_empty(entry, prefer_http, html)
+                if not tested:
+                    return
+                elif empty:
+                    msg('{} found empty via {}'.format(e_summary(entry), method))
+                    self.update_field(entry, 'content_type', 'empty')
+                else:
+                    self.update_field(entry, 'content_type', 'nonempty')
+                    (_, files, owner, name) = self.extract_files_from_html(html, entry)
+                    if owner != entry['owner']:
+                        import ipdb; ipdb.set_trace()
+                    elif name != entry['name']:
+                        import ipdb; ipdb.set_trace()
+                    if files:
+                        self.update_field(entry, 'files', files)
+                        msg('added {} files for {}'.format(len(files), e_summary(entry)))
+                    else:
+                        # Something went wrong. Maybe the repository has been
+                        # renamed and getting the http page now fails, etc.
+                        msg('*** problem getting files for nonempty repo {}'.format(
+                            e_summary(entry)))
                 if entry['content_type'] != 'empty':
-                    # Try to get the readme.
+                    # If we got files, try to get the readme.
                     try:
                         (method, readme) = self.get_readme(entry, prefer_http, False)
                         if readme and not isinstance(readme, int):
                             self.update_field(entry, 'readme', readme)
                     except:
                         msg('*** failed to get readme for {}'.format(e_summary(entry)))
-
 
         if overwrite:
             msg('Verifying and reconciling database entries against GitHub.')
@@ -1962,35 +2053,56 @@ class GitHubIndexer():
     def infer_type(self, targets=None, prefer_http=False, overwrite=False,
                    start_id=None, **kwargs):
 
-        def believe_noncode(entry):
-            if len(entry['languages']) == 1:
-                langs = [lang['name'].lower() for lang in entry['languages']]
-                return True if langs[0] in ['tex', 'latex', 'groff'] else False
-            else:
-                return False
+        def guess_type(entry):
+            # Test 1: If any file has a code file extension, then there is code.
+            if entry['files'] != -1:
+                for f in entry['files']:
+                    if has_code_extension(f) or is_code_file(f):
+                        return 'code'
+            # Test 2: if GitHub reported any recognized programming language.
+            if entry['languages'] != -1:
+                for pair in entry['languages']:
+                    if known_code_lang(pair['name']):
+                        return 'code'
+            return None
 
         def body_function(entry):
             t1 = time()
             if entry['content_type'] == '':
+                (code, html) = self.get_home_page(entry)
+                if code in [404, 451]:
+                    return
                 (method, tested, empty) = self.check_empty(entry, prefer_http)
-                if tested:
-                    if empty:
-                        msg('{} found empty via {}'.format(e_summary(entry), method))
-                        self.update_field(entry, 'content_type', 'empty')
-                        return
+                if not tested:
+                    return
+                elif empty:
+                    msg('{} found empty via {}'.format(e_summary(entry), method))
+                    self.update_field(entry, 'content_type', 'empty')
+                else:
+                    self.update_field(entry, 'content_type', 'nonempty')
+                    (_, files, owner, name) = self.extract_files_from_html(html, entry)
+                    if owner != entry['owner']:
+                        import ipdb; ipdb.set_trace()
+                    elif name != entry['name']:
+                        import ipdb; ipdb.set_trace()
+                    if files:
+                        self.update_field(entry, 'files', files)
+                        msg('added {} files for {}'.format(len(files), e_summary(entry)))
                     else:
-                        msg('{} found nonempty via {}'.format(e_summary(entry), method))
-                        self.update_field(entry, 'content_type', 'nonempty')
+                        # Something went wrong. Maybe the repository has been
+                        # renamed and getting the http page now fails, etc.
+                        msg('*** problem getting files for nonempty repo {}'.format(
+                            e_summary(entry)))
             elif entry['content_type'] == 'empty':
                 msg('*** {} believed to be empty -- skipping'.format(e_summary(entry)))
                 return
 
-            if entry['languages'] == '' or entry['languages'] == -1:
-                msg('*** no languages for {} -- skipping'.format(e_summary(entry)))
-                return
-            if believe_noncode(entry):
-                msg('{} inferred to be noncode'.format(e_summary(entry)))
-                self.update_field(entry, 'content_type', 'noncode')
+            guessed = guess_type(entry)
+            if guessed:
+                msg('{} guessed to contain {}'.format(e_summary(entry), guessed))
+                self.update_field(entry, 'content_type', guessed)
+            else:
+                msg('Unable to guess type of {}'.format(e_summary(entry)))
 
         # And let's do it.
         selected_repos = {'is_deleted': False, 'is_visible': True}
