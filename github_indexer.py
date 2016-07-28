@@ -17,6 +17,7 @@ import requests
 import json
 import http
 import requests
+import pprint
 import urllib
 import github3
 import humanize
@@ -1387,6 +1388,12 @@ class GitHubIndexer():
                 fork_status = 'No'
             msg('FORK:'.ljust(width), fork_status)
             msg('CONTENT TYPE:'.ljust(width), entry['content_type'])
+            if entry['files']:
+                files_list = pprint.pformat(entry['files'], indent=width,
+                                            width=(70), compact=True)
+                # Get rid of leading and trailing cruft
+                files_list = files_list[width+1:-1]
+            msg('FILES:'.ljust(width), files_list)
             msg('VISIBLE:'.ljust(width), 'Yes' if entry['is_visible'] else 'No')
             msg('DELETED:'.ljust(width), 'Yes' if entry['is_deleted'] else 'No')
             msg('CREATED:'.ljust(width), timestamp_str(entry['time']['repo_created']))
