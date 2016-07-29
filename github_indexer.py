@@ -1812,7 +1812,6 @@ class GitHubIndexer():
     def add_readmes(self, targets=None, languages=None, prefer_http=False,
                     api_only=False, start_id=0, force=False, **kwargs):
         def body_function(entry):
-            import ipdb; ipdb.set_trace()
             if entry['is_visible'] == False:
                 # See note at the end of the parent function (add_readmes).
                 return
