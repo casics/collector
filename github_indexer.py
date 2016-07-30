@@ -1907,7 +1907,6 @@ class GitHubIndexer():
         the flag 'overwrite' is True.
         '''
         def body_function(thing):
-            t1 = time()
             if isinstance(thing, github3.repos.repo.Repository):
                 (is_new, entry) = self.add_entry_from_github3(thing, overwrite)
                 if is_new:
@@ -1984,7 +1983,6 @@ class GitHubIndexer():
                 import ipdb; ipdb.set_trace()
 
         def body_function(thing):
-            t1 = time()
             if isinstance(thing, github3.repos.repo.Repository):
                 repo = thing
                 (added, entry) = self.add_entry_from_github3(repo)
@@ -2086,47 +2084,7 @@ class GitHubIndexer():
                         return 'code'
             return None
 
-        def body_function(entry):
-            t1 = time()
-            value = entry['content_type']
-            if value == '':
-                (code, html) = self.get_home_page(entry)
-                if code in [404, 451]:
-                    return
-                (method, tested, empty) = self.check_empty(entry, prefer_http)
-                if not tested:
-                    return
-                elif empty:
-                    msg('{} found empty via {}'.format(e_summary(entry), method))
-                    self.update_field(entry, 'content_type', 'empty')
-                    return
-                else:
-                    self.update_field(entry, 'content_type', 'nonempty')
-                    (_, files, owner, name) = self.extract_files_from_html(html, entry)
-                    if owner != entry['owner']:
-                        msg('{} owner changed to {}'.format(e_summary(entry), owner))
-                        self.update_field(entry, 'owner', owner)
-                    elif name != entry['name']:
-                        msg('{} repo name changed to {}'.format(e_summary(entry), name))
-                        self.update_field(entry, 'name', name)
-
-                    if files:
-                        self.update_field(entry, 'files', files)
-                        msg('added {} files for {}'.format(len(files), e_summary(entry)))
-                        return
-                    else:
-                        # Something went wrong. Maybe the repository has been
-                        # renamed and getting the http page now fails, etc.
-                        msg('*** problem getting files for nonempty repo {}'.format(
-                            e_summary(entry)))
-                        return
-            elif value == 'empty':
-                msg('*** {} believed to be empty -- skipping'.format(e_summary(entry)))
-                return
-            elif value in ['code', 'noncode'] and not force:
-                msg('*** {} already known to be {} -- skipping'.format(e_summary(entry), value))
-                return
-
+        def update_content_type(entry):
             guessed = guess_type(entry)
             if guessed:
                 msg('{} guessed to contain {}'.format(e_summary(entry), guessed))
@@ -2134,7 +2092,49 @@ class GitHubIndexer():
             else:
                 msg('Unable to guess type of {}'.format(e_summary(entry)))
 
-        # And let's do it.
+        def update_files(entry, files):
+            self.update_field(entry, 'files', files)
+            msg('added {} files for {}'.format(len(files), e_summary(entry)))
+
+        def body_function(entry):
+            ctype = entry['content_type']
+            summary = e_summary(entry)
+            if ctype == 'empty':
+                msg('*** {} empty -- skipping'.format(summary))
+                return
+            if ctype in ['code', 'noncode'] and not force:
+                msg('*** {} known to be {} -- skipping'.format(summary, ctype))
+                return
+            if entry['files']:
+                update_content_type(entry)
+                return
+
+            # We don't have a files list yet. Get it.
+            (code, html) = self.get_home_page(entry)
+            if code in [404, 451]:
+                return
+            (method, tested, empty) = self.check_empty(entry, prefer_http, html)
+            if not tested:
+                return
+            elif empty:
+                msg('{} found empty via {}'.format(e_summary(entry), method))
+                self.update_field(entry, 'content_type', 'empty')
+                return
+            self.update_field(entry, 'content_type', 'nonempty')
+            (_, files, owner, name) = self.extract_files_from_html(html, entry)
+            if owner != entry['owner']:
+                msg('{} owner changed to {}'.format(e_summary(entry), owner))
+                self.update_field(entry, 'owner', owner)
+            if name != entry['name']:
+                msg('{} repo name changed to {}'.format(e_summary(entry), name))
+                self.update_field(entry, 'name', name)
+            if files:
+                update_files(entry, files)
+                update_content_type(entry)
+            else:
+                msg('*** problem getting files for {}'.format(e_summary(entry)))
+
+        # Main loop.
         selected_repos = {'is_deleted': False, 'is_visible': True}
         if start_id > 0:
             msg('Skipping GitHub id\'s less than {}'.format(start_id))
