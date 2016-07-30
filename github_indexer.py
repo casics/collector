@@ -1630,6 +1630,22 @@ class GitHubIndexer():
 
 
     def get_readme(self, entry, prefer_http=False, api_only=False):
+
+        def get_raw(url):
+            r = requests.get(url)
+            code = r.status_code
+            if code in [200, 203, 206]:
+                # Watch out for bad files.  Threshold at 5 MB.
+                if int(r.headers['content-length']) > 5242880:
+                    return (code, '')
+                else:
+                    return (code, r.text)
+            elif code in [404, 451]:
+                # 404 = doesn't exist.  451 = unavailable for legal reasons.
+                return (code, None)
+            else:
+                return (code, '')
+
         # First try to get it via direct HTTP access, to save on API calls.
         # If that fails and prefer_http != False, we resport to API calls.
         if not api_only:
@@ -1653,13 +1669,19 @@ class GitHubIndexer():
             base_url = 'https://raw.githubusercontent.com/' + e_path(entry)
             branch = entry['default_branch'] if entry['default_branch'] else 'master'
             if readme_file:
-                r = requests.get(base_url + '/' + branch + '/' + readme_file)
-                if r.status_code == 200:
-                    # Watch out for bad files.  Threshold at 5 MB.
-                    if int(r.headers['content-length']) > 5242880:
-                        return ('http', '')
-                    else:
-                        return ('http', r.text)
+                url = base_url + '/' + branch + '/' + readme_file
+                (status, content) = get_raw(url)
+                if status == 503:
+                    # Weird behavior -- not sure if it's our system or theirs,
+                    # but we sometimes get 503 and if you try it again, it works.
+                    msg('code 503 -- retrying {}'.format(url))
+                    (status, content) = get_raw(url)
+                if status in [200, 203, 206, 404, 451, 503]:
+                    return ('http', content)
+                else:
+                    msg('*** code {} getting readme for {}'.format(
+                        r.status_code, url))
+                    return ('http', '')
             elif entry['files']:
                 # We have a list of files in the repo, and there's no README.
                 return ('http', None)
@@ -1865,12 +1887,14 @@ class GitHubIndexer():
                 msg('{} {} in {:.2f}s via {}'.format(
                     e_summary(entry), len(readme), (t2 - t1), method))
                 self.update_field(entry, 'readme', readme)
-            else:
+            elif readme == None:
                 # If GitHub doesn't return a README file, we need to
                 # record something to indicate that we already tried.
                 # The something can't be '', or None, or 0.  We use -1.
-                msg('No readme for {}'.format(e_summary(entry)))
+                msg('no readme for {}'.format(e_summary(entry)))
                 self.update_field(entry, 'readme', -1)
+            else:
+                msg('Got {} for readme for {}'.format(readme, e_summary(entry)))
             self.update_field(entry, 'is_visible', True)
 
         # Set up default selection criteria WHEN NOT USING 'targets'.
