@@ -2061,7 +2061,7 @@ class GitHubIndexer():
 
 
     def infer_type(self, targets=None, prefer_http=False, overwrite=False,
-                   start_id=None, **kwargs):
+                   force=False, start_id=None, **kwargs):
 
         def guess_type(entry):
             # Test 1: If any file has a code file extension, then there is code.
@@ -2078,7 +2078,8 @@ class GitHubIndexer():
 
         def body_function(entry):
             t1 = time()
-            if entry['content_type'] == '':
+            value = entry['content_type']
+            if value == '':
                 (code, html) = self.get_home_page(entry)
                 if code in [404, 451]:
                     return
@@ -2088,23 +2089,32 @@ class GitHubIndexer():
                 elif empty:
                     msg('{} found empty via {}'.format(e_summary(entry), method))
                     self.update_field(entry, 'content_type', 'empty')
+                    return
                 else:
                     self.update_field(entry, 'content_type', 'nonempty')
                     (_, files, owner, name) = self.extract_files_from_html(html, entry)
                     if owner != entry['owner']:
-                        import ipdb; ipdb.set_trace()
+                        msg('{} owner changed to {}'.format(e_summary(entry), owner))
+                        self.update_field(entry, 'owner', owner)
                     elif name != entry['name']:
-                        import ipdb; ipdb.set_trace()
+                        msg('{} repo name changed to {}'.format(e_summary(entry), name))
+                        self.update_field(entry, 'name', name)
+
                     if files:
                         self.update_field(entry, 'files', files)
                         msg('added {} files for {}'.format(len(files), e_summary(entry)))
+                        return
                     else:
                         # Something went wrong. Maybe the repository has been
                         # renamed and getting the http page now fails, etc.
                         msg('*** problem getting files for nonempty repo {}'.format(
                             e_summary(entry)))
-            elif entry['content_type'] == 'empty':
+                        return
+            elif value == 'empty':
                 msg('*** {} believed to be empty -- skipping'.format(e_summary(entry)))
+                return
+            elif value in ['code', 'noncode'] and not force:
+                msg('*** {} already known to be {} -- skipping'.format(e_summary(entry), value))
                 return
 
             guessed = guess_type(entry)
