@@ -641,7 +641,9 @@ def known_code_lang(lang):
     else:
         return False
 
-
+# code_files and noncode_files are taken literally, without file
+# extensions of any kind, and matched in a case-insensitive way.
+#
 code_files = [
     'build.xml',
     'capfile',
@@ -651,38 +653,272 @@ code_files = [
     'rakefile',
 ]
 
+noncode_files = [
+    '.config',
+    '.ds_store',
+    '.editorconfig',
+    '.gitattributes',
+    '.gitconfig',
+    '.gitignore',
+    '.gitmodules',
+    'license',
+    'readme',
+    'contributors',
+    'authors'
+]
+
+# FIXME: this list is incomplete
+#
+# FIXME: The following purposefully omits some files like php because it's
+# unclear whether we should take them as a sign of being about code or docs.
+# (An html-based documentation set could have an index.php file, for example,
+# and would probably be something we'd not want to classify as code.)  Needs
+# resolving what really counts as code.
+#
 code_file_extensions = [
-    'am',
     'ac',
+    'action',
+    'ada',
+    'agc',
+    'ahk',
+    'am',
+    'as',
+    'asc',
+    'ascx',
+    'asm',
+    'aspx',
+    'axd',
+    'axs',
+    'bal',
+    'bas',
+    'bash',
+    'bat',
+    'bpr',
+    'bsc',
+    'bsh',
     'c',
+    'c++',
+    'cbl',
+    'cc',
+    'cfm',
+    'cgi',
+    'cla',
     'class',
+    'cls',
+    'cmd',
+    'coffee',
+    'cp',
     'cpp',
     'cs',
+    'csh',
+    'ctl',
+    'cxx',
+    'dep',
+    'dfn',
+    'dlg',
+    'dot',
+    'dpk',
+    'dpr',
+    'ejs',
+    'exp',
+    'f',
+    'f90',
+    'f95',
+    'fas',
+    'for',
+    'fs',
+    'fsx',
+    'gch',
+    'gcl',
+    'groovy',
+    'gs',
     'h',
-    'in',
+    'hs',
+    'hx',
+    'ino',
+    'ins',
+    'irc',
+    'jav',
     'java',
+    'jml',
     'js',
+    'jsc',
+    'jse',
     'jsp',
+    'ksh',
+    'l',
+    'lap',
+    'lib',
+    'lisp',
+    'lmv',
+    'lsp',
+    'lst',
     'lua',
+    'luac',
     'm',
+    'm4',
+    'mak',
+    'make',
+    'matlab',
+    'mcp',
+    'mdp',
+    'mf',
     'mk',
+    'mk',
+    'ml',
+    'mod',
     'msvc',
+    'o',
+    'obj',
+    'pas',
+    'pdb',
+    'perl',
+    'ph',
     'pl',
+    'pm',
+    'pri',
+    'prl',
+    'pro',
+    'ptx',
     'py',
+    'pyc',
+    'pyo',
+    'pyw',
+    'qs',
     'r',
     'rb',
+    'rbw',
+    'rc',
+    'rh',
+    'rpg',
+    'rule',
+    'run',
+    'sbr',
+    'scala',
+    'sct',
     'sh',
+    'ss',
     'swift',
+    'swt',
+    'tcl',
+    'tru',
     'vb',
-    'vcxproj',
+    'vba',
+    'vbe',
+    'vbi',
+    'vbs',
+    'vbx',
+    'vcxproj/',
+    'wbt',
+    'ws',
+    'wsdl',
+    'wsf',
     'xcodeproj/',
+    'xla',
+    'xlm',
+    'xsc',
+    'xslt',
+    'xul',
+    'zero',
+    'zsh',
+]
+
+# FIXME: this list is incomplete.
+#
+# This purposefully omits .html & .htm files because someone could put
+# javascript inside HTML files.  Ditto for .xml and the possibility of XSLT.
+#
+noncode_file_extensions = [
+    'ascii',
+    'avi',
+    'bbl',
+    'bib',
+    'bibtex',
+    'bmp',
+    'conf',
+    'csv',
+    'dbx',
+    'doc',
+    'docx',
+    'dvi',
+    'enex',
+    'enw',
+    'epdf',
+    'epub',
+    'fdf',
+    'gif',
+    'help',
+    'jpeg',
+    'jpg',
+    'm4a',
+    'm4p',
+    'man',
+    'markdown',
+    'md',
+    'mdown',
+    'mdwn',
+    'mov',
+    'mp3',
+    'mp4',
+    'mp4a',
+    'mpeg',
+    'mpg',
+    'nbib',
+    'odc',
+    'odp',
+    'ods',
+    'odt',
+    'ogg',
+    'opml',
+    'opx',
+    'oxps',
+    'oxt',
+    'pcl',
+    'pdf',
+    'pdfa',
+    'pict',
+    'plist',
+    'pmd',
+    'png',
+    'pod',
+    'ppdf',
+    'ppsx',
+    'ppt',
+    'pptx',
+    'ps',
+    'pub',
+    'raw',
+    'roff',
+    'rtf',
+    'sgml',
+    'snd',
+    'tbl',
+    'tex',
+    'text',
+    'textile',
+    'tif',
+    'tiff',
+    'txt',
+    'vcard',
+    'vsd',
+    'wav',
+    'wma',
+    'wps',
+    'xgmml',
+    'yml',
 ]
 
 def is_code_file(name):
     return name.lower() in code_files
 
+def is_noncode_file(name):
+    return name.lower() in noncode_files
+
 def has_code_extension(name):
     return name.split(".")[-1].lower() in code_file_extensions
+
+def has_noncode_extension(name):
+    return name.split(".")[-1].lower() in noncode_file_extensions
 
 
 # Utilities for working with our MongoDB contents.
@@ -708,8 +944,13 @@ def e_languages(entry):
         return entry['languages']
 
 
-def make_lang_dict(langs):
+def make_lang_value(langs):
+    langs = [langs] if not isinstance(langs, list) else langs
     return [{'name': lang} for lang in langs]
+
+
+def make_content_value(content, method='file names'):
+    return {'content': content, 'basis': method}
 
 
 # Error classes for internal communication.
@@ -853,6 +1094,12 @@ class GitHubIndexer():
                 return None
         conn.request("GET", url, {}, headers)
         response = conn.getresponse()
+        # First check for 202, "accepted". Wait half a second and try again.
+        if response.status == 202:
+            sleep(0.5)                  # Arbitrary.
+            msg('*** Got code 202 for {} -- retrying'.format(url))
+            return self.direct_api_call(url)
+        # Note: next "if" must not be an "elif"!
         if response.status == 200:
             content = response.readall()
             try:
@@ -863,7 +1110,7 @@ class GitHubIndexer():
                 msg('Undecodable content received for {}'.format(url))
                 return ''
         elif response.status == 301:
-            # Redirection
+            # Redirection.  Start from the top with new URL.
             return self.direct_api_call(response.getheader('Location'))
         else:
             msg('Response status {} for {}'.format(response.status, url))
@@ -944,8 +1191,14 @@ class GitHubIndexer():
 
 
     def get_home_page(self, entry, owner=None, name=None):
-        r = requests.get(self.github_url(entry, owner, name))
-        return (r.status_code, r.text)
+        count = 3
+        while count > 0:
+            r = requests.get(self.github_url(entry, owner, name))
+            if r.status_code == 202:
+                sleep(0.5)
+                count -= 1
+                continue
+            return (r.status_code, r.text)
 
 
     def add_entry(self, entry):
@@ -962,6 +1215,20 @@ class GitHubIndexer():
         self.db.update({'_id': entry['_id']},
                        {'$set': {field: value,
                                  'time.data_refreshed': now}})
+        # Update this so that the object being held by the caller reflects
+        # what was written to the database.
+        entry['time']['data_refreshed'] = now
+
+
+    def push_field(self, entry, field, value):
+        # Don't push duplicate items.
+        if value in entry[field]:
+            return
+        entry[field].append(value)
+        now = now_timestamp()
+        self.db.update({'_id': entry['_id']},
+                       {'$addToSet': {field: value},
+                        '$set':      {'time.data_refreshed': now}})
         # Update this so that the object being held by the caller reflects
         # what was written to the database.
         entry['time']['data_refreshed'] = now
@@ -1019,14 +1286,6 @@ class GitHubIndexer():
         entry['time']['repo_pushed']    = canonicalize_timestamp(repo.pushed_at)
         entry['time']['data_refreshed'] = now_timestamp()
 
-        # Turns out we can't trust the value returned by GitHub: if it's 0,
-        # the repo is often *not* actually empty.  So all we can do is record
-        # when we find it's not 0.
-        if repo.size > 0 and entry['content_type'] == '':
-            # Only set this if we didn't know anything at all before, so that we
-            # don't blow away a value we may have already found some other way.
-            entry['content_type'] = 'nonempty'
-
         self.update_entry(entry)
 
 
@@ -1041,8 +1300,7 @@ class GitHubIndexer():
             # destroy those fields if we have them.
             fork_of = repo.parent.full_name if repo.parent else ''
             fork_root = repo.source.full_name if repo.source else ''
-            languages = [{'name': repo.language}] if repo.language else []
-            content_type = 'nonempty' if repo.size > 0 else ''
+            language = make_lang_value([repo.language]) if repo.language else []
             entry = repo_entry(id=repo.id,
                                name=repo.name,
                                owner=repo.owner.login,
@@ -1050,7 +1308,6 @@ class GitHubIndexer():
                                languages=languages,
                                default_branch=repo.default_branch,
                                homepage=repo.homepage,
-                               content_type=content_type,
                                is_deleted=False,
                                is_visible=not repo.private,
                                is_fork=repo.fork,
@@ -1142,7 +1399,7 @@ class GitHubIndexer():
                 name  = item[item.find('/') + 1:]
                 # There may be multiple entries with the same owner/name, e.g. when
                 # a repo was deleted and recreated afresh.
-                results = self.db.find({'owner': owner, 'name': name})
+                results = self.db.find({'owner': owner, 'name': name}, {'_id': 1})
                 id_list = []
                 for entry in results:
                     id_list.append(int(entry['_id']))
@@ -1160,7 +1417,7 @@ class GitHubIndexer():
                     return None
                 (n_owner, n_name) = self.owner_name_from_github_url(url)
                 if n_owner and n_name:
-                    result = self.db.find_one({'owner': n_owner, 'name': n_name})
+                    result = self.db.find_one({'owner': n_owner, 'name': n_name}, {'_id': 1})
                     if result:
                         msg('*** {}/{} is now {}/{}'.format(owner, name,
                                                             n_owner, n_name))
@@ -1283,42 +1540,42 @@ class GitHubIndexer():
 
 
     def summarize_readme_stats(self, targets=None):
-        have_readmes = self.db.find({'readme':  {'$nin': ['', -1]} }).count()
+        have_readmes = self.db.count({'readme':  {'$nin': ['', -1, -2, None]} })
         have_readmes = humanize.intcomma(have_readmes)
-        msg('Database has {} entries with README files.'.format(have_readmes))
+        msg('{} entries have README files.'.format(have_readmes))
+        bad_readmes = self.db.count({'readme': -2})
+        bad_readmes = humanize.intcomma(bad_readmes)
+        msg('{} repos had bad/garbage README files.'.format(bad_readmes))
 
 
     def summarize_visible(self, targets=None):
-        deleted = self.db.find({'is_deleted': True}, {}).count()
+        deleted = self.db.count({'is_deleted': True})
         deleted = humanize.intcomma(deleted)
         msg('{} entries have been deleted in GitHub.'.format(deleted))
-        visible = self.db.find({'is_visible': False}, {}).count()
+        visible = self.db.count({'is_visible': False})
         visible = humanize.intcomma(visible)
         msg('{} entries are no longer visible in GitHub (maybe due to deletion).'.format(visible))
 
 
     def summarize_files(self, targets=None):
-        with_files = self.db.find({'files': {'$ne': []}}, {}).count()
-        with_files = humanize.intcomma(with_files)
-        msg('{} entries contain lists of files.'.format(with_files))
+        empty = self.db.count({'files': -1})
+        empty = humanize.intcomma(empty)
+        msg('{} repos believed to be empty.'.format(empty))
+        files = self.db.count({'files': {'$nin': [-1, []]}})
+        files = humanize.intcomma(files)
+        msg('{} entries contain lists of files.'.format(files))
 
 
     def summarize_types(self, targets=None):
-        no_content_type = self.db.find({'content_type': ''}, {}).count()
-        no_content_type = humanize.intcomma(no_content_type)
-        msg('{} entries without content_type.'.format(no_content_type))
-        are_empty = self.db.find({'content_type': 'empty'}, {}).count()
-        are_empty = humanize.intcomma(are_empty)
-        msg('{} repos believed to be empty.'.format(are_empty))
-        are_nonempty = self.db.find({'content_type': 'nonempty'}, {}).count()
-        are_nonempty = humanize.intcomma(are_nonempty)
-        msg('{} repos believed to be nonempty.'.format(are_nonempty))
-        are_code = self.db.find({'content_type': 'code'}, {}).count()
-        are_code = humanize.intcomma(are_code)
-        msg('{} repos believed to contain code.'.format(are_code))
-        are_noncode = self.db.find({'content_type': 'noncode'}, {}).count()
-        are_noncode = humanize.intcomma(are_noncode)
-        msg('{} repos believed not to contain code.'.format(are_noncode))
+        c = self.db.count({'content_type': []})
+        c = humanize.intcomma(c)
+        msg('{} entries without content_type.'.format(c))
+        c = self.db.count({'content_type': {'$elemMatch': {'content': 'code'}}})
+        c = humanize.intcomma(c)
+        msg('{} repos believed to contain code.'.format(c))
+        c = self.db.count({'content_type': {'$elemMatch': {'content': 'noncode'}}})
+        c = humanize.intcomma(c)
+        msg('{} repos believed not to contain code.'.format(c))
 
 
     def list_deleted(self, targets=None, **kwargs):
@@ -1345,8 +1602,8 @@ class GitHubIndexer():
         self.summarize_visible()
         self.summarize_files()
         self.summarize_types()
-        self.summarize_readme_stats()
-        self.summarize_language_stats()
+        # self.summarize_readme_stats()
+        # self.summarize_language_stats()
 
 
     def print_indexed_ids(self, targets={}, languages=None, start_id=0, **kwargs):
@@ -1362,8 +1619,8 @@ class GitHubIndexer():
         if targets:
             msg('Total number of entries: {}'.format(humanize.intcomma(len(targets))))
         else:
-            results = self.db.find(filter or targets)
-            msg('Total number of entries: {}'.format(humanize.intcomma(results.count())))
+            c = self.db.count(filter or targets)
+            msg('Total number of entries: {}'.format(humanize.intcomma(c)))
         for entry in self.entry_list(filter or targets, fields=['_id'], start_id=start_id):
             msg(entry['_id'])
 
@@ -1401,12 +1658,16 @@ class GitHubIndexer():
                 fork_status = 'No'
             msg('FORK:'.ljust(width), fork_status)
             msg('CONTENT TYPE:'.ljust(width), entry['content_type'])
-            if entry['files']:
+            if entry['files'] and entry['files'] != -1:
                 files_list = pprint.pformat(entry['files'], indent=width,
                                             width=(70), compact=True)
                 # Get rid of leading and trailing cruft
                 files_list = files_list[width+1:-1]
-            msg('FILES:'.ljust(width), files_list)
+                msg('FILES:'.ljust(width), files_list)
+            elif entry['files'] == -1:
+                msg('FILES:'.ljust(width), '(empty repo)')
+            else:
+                msg('FILES:'.ljust(width))
             msg('VISIBLE:'.ljust(width), 'Yes' if entry['is_visible'] else 'No')
             msg('DELETED:'.ljust(width), 'Yes' if entry['is_deleted'] else 'No')
             msg('CREATED:'.ljust(width), timestamp_str(entry['time']['repo_created']))
@@ -1576,7 +1837,7 @@ class GitHubIndexer():
             return False
         marker = 'itemprop="about">'
         marker_len = len(marker)
-        description = []
+        description = None
         startpoint = html.find(marker)
         if startpoint > 0:
             endpoint = html.find('</span>', startpoint)
@@ -1635,37 +1896,38 @@ class GitHubIndexer():
             r = requests.get(url)
             code = r.status_code
             if code in [200, 203, 206]:
-                # Watch out for bad files.  Threshold at 5 MB.
+                # Got it, but watch out for bad files.  Threshold at 5 MB.
                 if int(r.headers['content-length']) > 5242880:
-                    return (code, '')
+                    return (code, -2)
                 else:
                     return (code, r.text)
             elif code in [404, 451]:
                 # 404 = doesn't exist.  451 = unavailable for legal reasons.
-                return (code, None)
+                return (code, -1)
             else:
-                return (code, '')
+                return (code, None)
 
         # First try to get it via direct HTTP access, to save on API calls.
         # If that fails and prefer_http != False, we resport to API calls.
         if not api_only:
             # Do we already have a list of files?  If so, look for the README.
             readme_file = None
-            for f in entry['files']:
-                # GitHub preferentially shows README.md, and ranks README.txt
-                # below all others.
-                if f == 'README.md':
-                    readme_file = f
-                    break
-                elif f.startswith('README.') and f != 'README.txt':
-                    readme_file = f
-                    break
-                elif f == 'README':
-                    readme_file = f
-                    break
-                elif f == 'README.txt':
-                    readme_file = f
-                    break
+            if isinstance(entry['files'], list):
+                for f in entry['files']:
+                    # GitHub preferentially shows README.md, and ranks README.txt
+                    # below all others.
+                    if f == 'README.md':
+                        readme_file = f
+                        break
+                    elif f.startswith('README.') and f != 'README.txt':
+                        readme_file = f
+                        break
+                    elif f == 'README':
+                        readme_file = f
+                        break
+                    elif f == 'README.txt':
+                        readme_file = f
+                        break
             base_url = 'https://raw.githubusercontent.com/' + e_path(entry)
             branch = entry['default_branch'] if entry['default_branch'] else 'master'
             if readme_file:
@@ -1676,15 +1938,14 @@ class GitHubIndexer():
                     # but we sometimes get 503 and if you try it again, it works.
                     msg('code 503 -- retrying {}'.format(url))
                     (status, content) = get_raw(url)
-                if status in [200, 203, 206, 404, 451, 503]:
+                if content != None:
                     return ('http', content)
                 else:
-                    msg('*** code {} getting readme for {}'.format(
-                        r.status_code, url))
-                    return ('http', '')
-            elif entry['files']:
+                    msg('*** code {} getting readme for {}'.format(r.status_code, url))
+                    return ('http', None)
+            elif entry['files'] and entry['files'] != -1:
                 # We have a list of files in the repo, and there's no README.
-                return ('http', None)
+                return ('http', -1)
             else:
                 # We don't know repo's files, so we don't know the name of
                 # the README file (if any).  We resort to trying different
@@ -1733,11 +1994,20 @@ class GitHubIndexer():
 
         if not api_only:
             if not html:
-                (code, html) = self.get_home_page(entry)
-                if code in [404, 451]:
-                    # 404 = doesn't exist.  451 = unavailable for legal reasons.
-                    # Don't bother try to get it via API either.
-                    return ('http', False, True)
+                count = 3
+                while count > 0:
+                    (code, html) = self.get_home_page(entry)
+                    if code in [404, 451]:
+                        # 404 = doesn't exist.  451 = unavailable for legal
+                        # reasons.  Don't bother try to get it via API either.
+                        return ('http', False, True)
+                    if code == 202:
+                        # 202 = accepted. Try again after a pause.
+                        sleep(0.5)
+                        count -= 1
+                        continue
+                    break
+
             # Do *not* turn this next condition into "else html".
             if html:
                 return ('http', True, self.extract_empty_from_html(html))
@@ -1813,10 +2083,10 @@ class GitHubIndexer():
                 msg('{}{} in {:.2f}s via {}, {}'.format(
                     e_summary(entry), fork_info, (t2 - t1), method, lang_info))
                 if langs:
-                    self.update_field(entry, 'languages', make_lang_dict(langs))
+                    self.update_field(entry, 'languages', make_lang_value(langs))
                 else:
                     self.update_field(entry, 'languages', -1)
-                if desc:
+                if desc != None:
                     self.update_field(entry, 'description', desc)
                 if fork:
                     if isinstance(fork, str):
@@ -1887,12 +2157,6 @@ class GitHubIndexer():
                 msg('{} {} in {:.2f}s via {}'.format(
                     e_summary(entry), len(readme), (t2 - t1), method))
                 self.update_field(entry, 'readme', readme)
-            elif readme == None:
-                # If GitHub doesn't return a README file, we need to
-                # record something to indicate that we already tried.
-                # The something can't be '', or None, or 0.  We use -1.
-                msg('no readme for {}'.format(e_summary(entry)))
-                self.update_field(entry, 'readme', -1)
             else:
                 msg('Got {} for readme for {}'.format(readme, e_summary(entry)))
             self.update_field(entry, 'is_visible', True)
@@ -1915,8 +2179,8 @@ class GitHubIndexer():
             selected_repos['_id'] = {'$gte': start_id}
         if force:
             # "Force" in this context means get readmes even if we previously
-            # tried to get them, which is indicated by a -1 value.
-            selected_repos['readme'] = {'$in': ['', -1]}
+            # tried to get them, which is indicated by a -1 or -2 value.
+            selected_repos['readme'] = {'$in': ['', -1, -2]}
         else:
             selected_repos['readme'] = ''
 
@@ -2041,18 +2305,17 @@ class GitHubIndexer():
 
             if not entry or (not entry['is_visible'] and not force):
                 return
-            if entry['content_type'] == '':
+            if entry['content_type'] == []:
                 (code, html) = self.get_home_page(entry)
                 if code in [404, 451]:
                     return
-                (method, tested, empty) = self.check_empty(entry, prefer_http, html)
+                (method, tested, empty) = self.check_empty(entry, prefer_http=True, html=html)
                 if not tested:
                     return
                 elif empty:
                     msg('{} found empty via {}'.format(e_summary(entry), method))
-                    self.update_field(entry, 'content_type', 'empty')
+                    self.update_field(entry, 'files', -1)
                 else:
-                    self.update_field(entry, 'content_type', 'nonempty')
                     (_, files, owner, name) = self.extract_files_from_html(html, entry)
                     if owner != entry['owner']:
                         import ipdb; ipdb.set_trace()
@@ -2066,7 +2329,7 @@ class GitHubIndexer():
                         # renamed and getting the http page now fails, etc.
                         msg('*** problem getting files for nonempty repo {}'.format(
                             e_summary(entry)))
-                if entry['content_type'] != 'empty':
+                if entry['content_type'] != -1:
                     # If we got files, try to get the readme.
                     try:
                         (method, readme) = self.get_readme(entry, prefer_http, False)
@@ -2095,24 +2358,45 @@ class GitHubIndexer():
     def infer_type(self, targets=None, prefer_http=False, overwrite=False,
                    force=False, start_id=None, **kwargs):
 
+        def any_code_files(files):
+            # If even one file has a code file extension, there's code.
+            for f in files:
+                if has_code_extension(f) or is_code_file(f):
+                    return True
+            return False
+
+        def only_text_files(files):
+            # If only find clearly text-only files, there's probably no code.
+            # Return false if there's anything we don't recognize.
+            for f in files:
+                if is_noncode_file(f):
+                    continue
+                if not has_noncode_extension(f):
+                    return False
+            return True
+
         def guess_type(entry):
-            # Test 1: If any file has a code file extension, then there is code.
+            # File tests are very basic and conservative.  They are
+            # necessarily heuristic, so they could be wrong if someone does
+            # something really unusual.
             if entry['files'] != -1:
-                for f in entry['files']:
-                    if has_code_extension(f) or is_code_file(f):
-                        return 'code'
-            # Test 2: if GitHub reported any recognized programming language.
+                if any_code_files(entry['files']):
+                    return ('code', 'file names')
+                if only_text_files(entry['files']):
+                    return ('noncode', 'file names')
+            # The language-based heuristics are more iffy because GitHub's
+            # language analyzer sometimes guesses wrong.
             if entry['languages'] != -1:
-                for pair in entry['languages']:
-                    if known_code_lang(pair['name']):
-                        return 'code'
-            return None
+                for lang in entry['languages']:
+                    if known_code_lang(lang['name']):
+                        return ('code', 'languages')
+            return (None, None)
 
         def update_content_type(entry):
-            guessed = guess_type(entry)
+            (guessed, method) = guess_type(entry)
             if guessed:
                 msg('{} guessed to contain {}'.format(e_summary(entry), guessed))
-                self.update_field(entry, 'content_type', guessed)
+                self.push_field(entry, 'content_type', make_content_value(guessed, method))
             else:
                 msg('Unable to guess type of {}'.format(e_summary(entry)))
 
@@ -2121,30 +2405,30 @@ class GitHubIndexer():
             msg('added {} files for {}'.format(len(files), e_summary(entry)))
 
         def body_function(entry):
-            ctype = entry['content_type']
             summary = e_summary(entry)
-            if ctype == 'empty':
+            if entry['files'] == -1 and not force:
                 msg('*** {} empty -- skipping'.format(summary))
                 return
-            if ctype in ['code', 'noncode'] and not force:
-                msg('*** {} known to be {} -- skipping'.format(summary, ctype))
+            if entry['content_type'] and not force:
+                msg('*** {} already has content_type -- skipping'.format(summary))
                 return
+
+            # If we already have a list of files, we can infer things.
             if entry['files']:
                 update_content_type(entry)
                 return
-
             # We don't have a files list yet. Get it.
             (code, html) = self.get_home_page(entry)
             if code in [404, 451]:
                 return
-            (method, tested, empty) = self.check_empty(entry, prefer_http, html)
+            (method, tested, empty) = self.check_empty(entry, prefer_http=True, html=html)
             if not tested:
+                msg('*** problem getting home page for {}'.format(e_summary(entry)))
                 return
             elif empty:
                 msg('{} found empty via {}'.format(e_summary(entry), method))
-                self.update_field(entry, 'content_type', 'empty')
+                self.update_field(entry, 'files', -1)
                 return
-            self.update_field(entry, 'content_type', 'nonempty')
             (_, files, owner, name) = self.extract_files_from_html(html, entry)
             if owner != entry['owner']:
                 msg('{} owner changed to {}'.format(e_summary(entry), owner))
@@ -2193,7 +2477,6 @@ class GitHubIndexer():
                 elif 'tree' in results:
                     files = files_from_api(results['tree'])
                     self.update_field(entry, 'files', files)
-                    self.update_field(entry, 'content_type', 'nonempty')
                     msg('added {} files for {}'.format(len(files), e_summary(entry)))
                 else:
                     import ipdb; ipdb.set_trace()
@@ -2218,10 +2501,9 @@ class GitHubIndexer():
 
                 if empty:
                     msg('{} appears empty via http'.format(e_summary(entry)))
-                    self.update_field(entry, 'content_type', 'empty')
+                    self.update_field(entry, 'files', -1)
                 elif files:
                     self.update_field(entry, 'files', files)
-                    self.update_field(entry, 'content_type', 'nonempty')
                     msg('added {} files for {}'.format(len(files), e_summary(entry)))
                 else:
                     # Something went wrong. Maybe the repository has been
@@ -2248,13 +2530,12 @@ class GitHubIndexer():
                     files = output.split('\n')
                     files = [f for f in files if f]  # Remove empty strings.
                     self.update_field(entry, 'files', files)
-                    self.update_field(entry, 'content_type', 'nonempty')
                     msg('added {} files for {}'.format(len(files), e_summary(entry)))
                 else:
                     msg('*** no result for {}'.format(e_summary(entry)))
             elif code == 1 and err.find('non-existent') > 1:
                 msg('{} found empty'.format(e_summary(entry)))
-                self.update_field(entry, 'content_type', 'empty')
+                self.update_field(entry, 'files', -1)
             else:
                 import ipdb; ipdb.set_trace()
                 msg('*** Error for {}: {}'.format(e_summary(entry), err))
@@ -2276,10 +2557,10 @@ class GitHubIndexer():
         def body_function(entry):
             if not force:
                 info = e_summary(entry)
-                if entry['files']:
+                if entry['files'] and entry['files'] != -1:
                     msg('*** {} has a files list -- skipping'.format(info))
                     return
-                if entry['content_type'] == 'empty':
+                if entry['files'] == -1:
                     msg('*** {} believed to be empty -- skipping'.format(info))
                     return
                 if entry['is_visible'] == False or entry['is_deleted'] == True:
@@ -2290,8 +2571,8 @@ class GitHubIndexer():
             else:             get_files_via_svn(entry)
 
         def iterator(targets, start_id):
-            fields = ['files', 'content_type', 'default_branch', 'is_visible',
-                      'is_deleted', 'owner', 'name', 'time', '_id']
+            fields = ['files', 'default_branch', 'is_visible', 'is_deleted',
+                      'owner', 'name', 'time', '_id']
             return self.entry_list(targets, fields, start_id)
 
         # And let's do it.
@@ -2300,8 +2581,7 @@ class GitHubIndexer():
         else:
             # If we're not forcing re-getting the files, don't return results that
             # already have files data.
-            selected_repos = {'is_deleted': False, 'is_visible': True,
-                              'files': [], 'content_type': {'$ne': 'empty'}}
+            selected_repos = {'is_deleted': False, 'is_visible': True, 'files': []}
         if start_id > 0:
             msg('Skipping GitHub id\'s less than {}'.format(start_id))
             selected_repos['_id'] = {'$gte': start_id}
