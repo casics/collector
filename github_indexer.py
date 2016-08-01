@@ -1540,42 +1540,51 @@ class GitHubIndexer():
 
 
     def summarize_readme_stats(self, targets=None):
-        have_readmes = self.db.count({'readme':  {'$nin': ['', -1, -2, None]} })
-        have_readmes = humanize.intcomma(have_readmes)
-        msg('{} entries have README files.'.format(have_readmes))
-        bad_readmes = self.db.count({'readme': -2})
-        bad_readmes = humanize.intcomma(bad_readmes)
-        msg('{} repos had bad/garbage README files.'.format(bad_readmes))
+        c = self.db.count({'readme':  {'$nin': ['', -1, -2, None]},
+                                      'is_visible': True})
+        c = humanize.intcomma(c)
+        msg('{} visible entries have README content.'.format(c))
+        c = self.db.count({'readme': -2, 'is_visible': True})
+        c = humanize.intcomma(c)
+        msg('{} repos had bad/garbage README files.'.format(c))
 
 
     def summarize_visible(self, targets=None):
-        deleted = self.db.count({'is_deleted': True})
-        deleted = humanize.intcomma(deleted)
-        msg('{} entries have been deleted in GitHub.'.format(deleted))
-        visible = self.db.count({'is_visible': False})
-        visible = humanize.intcomma(visible)
-        msg('{} entries are no longer visible in GitHub (maybe due to deletion).'.format(visible))
+        c = self.db.count({'is_deleted': True})
+        c = humanize.intcomma(c)
+        msg('{} repos have been deleted in GitHub.'.format(c))
+        c = self.db.count({'is_visible': False})
+        c = humanize.intcomma(c)
+        msg('{} repos are no longer visible in GitHub (maybe due to deletion).'.format(c))
+        c = self.db.count({'is_visible': True})
+        c = humanize.intcomma(c)
+        msg('{} visible repos.'.format(c))
 
 
     def summarize_files(self, targets=None):
-        empty = self.db.count({'files': -1})
-        empty = humanize.intcomma(empty)
-        msg('{} repos believed to be empty.'.format(empty))
-        files = self.db.count({'files': {'$nin': [-1, []]}})
-        files = humanize.intcomma(files)
-        msg('{} entries contain lists of files.'.format(files))
+        c = self.db.count({'files': {'$nin': [-1, []]}, 'is_visible': True})
+        c = humanize.intcomma(c)
+        msg('{} visible repos contain lists of files.'.format(c))
+        c = self.db.count({'files': -1, 'is_visible': True})
+        c = humanize.intcomma(c)
+        msg('{} visible repos are empty.'.format(c))
+        c = self.db.count({'files': [], 'is_visible': True})
+        c = humanize.intcomma(c)
+        msg('{} visible entries still lack file lists.'.format(c))
 
 
     def summarize_types(self, targets=None):
-        c = self.db.count({'content_type': []})
+        c = self.db.count({'content_type': {'$elemMatch': {'content': 'code'}},
+                           'is_visible': True})
         c = humanize.intcomma(c)
-        msg('{} entries without content_type.'.format(c))
-        c = self.db.count({'content_type': {'$elemMatch': {'content': 'code'}}})
+        msg('{} visible repos believed to contain code.'.format(c))
+        c = self.db.count({'content_type': {'$elemMatch': {'content': 'noncode'}},
+                           'is_visible': True})
         c = humanize.intcomma(c)
-        msg('{} repos believed to contain code.'.format(c))
-        c = self.db.count({'content_type': {'$elemMatch': {'content': 'noncode'}}})
+        msg('{} visible repos believed not to contain code.'.format(c))
+        c = self.db.count({'content_type': [], 'is_visible': True})
         c = humanize.intcomma(c)
-        msg('{} repos believed not to contain code.'.format(c))
+        msg('{} visible entries still lack content_type.'.format(c))
 
 
     def list_deleted(self, targets=None, **kwargs):
@@ -1591,18 +1600,18 @@ class GitHubIndexer():
     def print_stats(self, **kwargs):
         '''Print an overall summary of the database.'''
         msg('Printing general statistics.')
-        total = humanize.intcomma(self.db.count())
-        msg('Database has {} total GitHub entries.'.format(total))
         last_seen_id = self.get_last_seen_id()
         if last_seen_id:
             msg('Last seen GitHub id: {}.'.format(last_seen_id))
         else:
             msg('*** no entries ***')
             return
+        total = humanize.intcomma(self.db.count())
+        msg('{} total database entries.'.format(total))
         self.summarize_visible()
         self.summarize_files()
         self.summarize_types()
-        # self.summarize_readme_stats()
+        self.summarize_readme_stats()
         # self.summarize_language_stats()
 
 
