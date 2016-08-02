@@ -1730,18 +1730,20 @@ class GitHubIndexer():
 
 
     def extract_files_from_html(self, html, entry):
+        # Returns a tuple:
+        #   (is_empty, files, owner, name, default_branch)
         empty_marker = '<h3>This repository is empty.</h3>'
         owner = entry['owner']
         name = entry['name']
         if not html:
-            return (False, [], owner, name)
+            return (False, [], owner, name, None)
         elif html.find(empty_marker) > 0:
-            return (True, [], owner, name)
+            return (True, [], owner, name, None)
         else:
             startmarker = '"file-wrap"'
             startpoint = html.find(startmarker)
             if startpoint < 0:
-                return (False, None, owner, name)
+                return (False, None, owner, name, None)
 
             # If the repo has been renamed, we may have gotten here using an
             # name.  First try to get the current name.
@@ -1774,14 +1776,14 @@ class GitHubIndexer():
             found_file   = html.find(filepat, nextstart)
             found_dir    = html.find(dirpat, nextstart)
             if found_file < 0 and found_dir < 0:
-                return (True, None, owner, name)
+                return (True, None, owner, name, None)
             nextstart = min([v for v in [found_file, found_dir] if v > -1])
             if nextstart >= 0:
                 branch_start = nextstart + len(base) + 6
                 branch_end = html.find('/', branch_start)
                 branch = html[branch_start : branch_end]
             else:
-                return (False, None, owner, name)
+                return (False, None, owner, name, None)
             section   = html[nextstart : html.find('</table', nextstart)]
             # Update patterns now that we know the branch
             filepat       = filepat + branch + '/'
@@ -1811,7 +1813,7 @@ class GitHubIndexer():
                         files.append(path + '/')
                 else:
                     # Something is inconsistent. Bail for now.
-                    return (False, None, owner, name)
+                    return (False, None, owner, name, branch)
                 section = section[endpoint :]
                 found_file   = section.find(filepat)
                 found_dir    = section.find(dirpat)
@@ -1819,7 +1821,7 @@ class GitHubIndexer():
                     break
                 else:
                     nextstart = min([v for v in [found_file, found_dir] if v > -1])
-            return (False, files, owner, name)
+            return (False, files, owner, name, branch)
 
 
     def extract_fork_from_html(self, html):
@@ -2325,11 +2327,14 @@ class GitHubIndexer():
                     msg('{} found empty via {}'.format(e_summary(entry), method))
                     self.update_field(entry, 'files', -1)
                 else:
-                    (_, files, owner, name) = self.extract_files_from_html(html, entry)
+                    (_, files, owner, name, branch) = self.extract_files_from_html(html, entry)
                     if owner != entry['owner']:
                         import ipdb; ipdb.set_trace()
-                    elif name != entry['name']:
+                    if name != entry['name']:
                         import ipdb; ipdb.set_trace()
+                    if branch and branch != entry['default_branch']:
+                        msg('{} default_branch changed to {}'.format(e_summary(entry), branch))
+                        self.update_field(entry, 'default_branch', branch)
                     if files:
                         self.update_field(entry, 'files', files)
                         msg('added {} files for {}'.format(len(files), e_summary(entry)))
@@ -2438,13 +2443,16 @@ class GitHubIndexer():
                 msg('{} found empty via {}'.format(e_summary(entry), method))
                 self.update_field(entry, 'files', -1)
                 return
-            (_, files, owner, name) = self.extract_files_from_html(html, entry)
+            (_, files, owner, name, branch) = self.extract_files_from_html(html, entry)
             if owner != entry['owner']:
                 msg('{} owner changed to {}'.format(e_summary(entry), owner))
                 self.update_field(entry, 'owner', owner)
             if name != entry['name']:
                 msg('{} repo name changed to {}'.format(e_summary(entry), name))
                 self.update_field(entry, 'name', name)
+            if branch and branch != entry['default_branch']:
+                msg('{} default_branch changed to {}'.format(e_summary(entry), branch))
+                self.update_field(entry, 'default_branch', branch)
             if files:
                 update_files(entry, files)
                 update_content_type(entry)
@@ -2500,14 +2508,16 @@ class GitHubIndexer():
                 # We got a code over 400, but we don't know why.
                 raise UnexpectedResponseException('Getting files', code)
             elif html:
-                (empty, files, owner, name) = self.extract_files_from_html(html, entry)
+                (empty, files, owner, name, branch) = self.extract_files_from_html(html, entry)
                 if owner != entry['owner']:
                     msg('{} owner changed to {}'.format(e_summary(entry), owner))
                     self.update_field(entry, 'owner', owner)
-                elif name != entry['name']:
+                if name != entry['name']:
                     msg('{} repo name changed to {}'.format(e_summary(entry), name))
                     self.update_field(entry, 'name', name)
-
+                if branch and branch != entry['default_branch']:
+                    msg('{} default_branch changed to {}'.format(e_summary(entry), branch))
+                    self.update_field(entry, 'default_branch', branch)
                 if empty:
                     msg('{} appears empty via http'.format(e_summary(entry)))
                     self.update_field(entry, 'files', -1)
