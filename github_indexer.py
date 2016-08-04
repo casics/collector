@@ -476,8 +476,13 @@ class GitHubIndexer():
             msg('added {} files for {}'.format(num, e_summary(entry)))
             updates['files'] = entry['files'] = page.files()
         if page.languages() != e_languages(entry):
-            msg('added {} languages for {}'.format(len(page.languages()), e_summary(entry)))
-            updates['languages'] = entry['languages'] = make_languages(page.languages())
+            page_lang = page.languages()
+            num_lang = len(page_lang) if page_lang else 0
+            if num_lang > 0 and (not entry['languages'] or entry['languages'] == -1):
+                # The HTML pages don't always have languages. Don't reset our
+                # value if we don't actually pull something out of the HTML.
+                msg('added {} languages for {}'.format(num_lang, e_summary(entry)))
+                updates['languages'] = entry['languages'] = make_languages(page_lang)
         if updates:
             updates['time.data_refreshed'] = now_timestamp()
             entry['time']['data_refreshed'] = updates['time.data_refreshed']
