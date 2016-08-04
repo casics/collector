@@ -382,8 +382,11 @@ class GitHubIndexer():
         updates = {}
         if entry['is_deleted'] != False:
             # We found it via github3 => not deleted.
-            msg('{} is_deleted changed to False'.format(e_summary(entry)))
+            msg('{} deleted status set to False'.format(e_summary(entry)))
             updates['is_deleted'] = entry['is_deleted'] = False
+        if entry['is_visible'] != bool(not repo.private):
+            msg('{} visibility changed to {}'.format(e_summary(entry), not repo.private))
+            updates['is_visible'] = entry['is_visible'] = bool(not repo.private)
         if entry['owner'] != repo.owner.login:
             msg('{} owner changed to {}'.format(e_summary(entry), repo.owner.login))
             updates['owner'] = entry['owner'] = repo.owner.login
@@ -399,9 +402,6 @@ class GitHubIndexer():
         if entry['homepage'] != repo.homepage:
             msg('{} homepage changed to {}'.format(e_summary(entry), repo.homepage))
             updates['homepage'] = entry['homepage'] = repo.homepage
-        if entry['is_visible'] != bool(not repo.private):
-            msg('{} visibility changed to {}'.format(e_summary(entry), not repo.private))
-            updates['is_visible'] = entry['is_visible'] = bool(not repo.private)
 
         if repo.language and (not entry['languages'] or entry['languages'] == -1):
             # We may add more languages than the single language returned by
@@ -459,6 +459,14 @@ class GitHubIndexer():
             self.mark_entry_invisible(entry)
             return None
         updates = {}
+        if not entry['is_visible']:
+            # Obviously it's visible if we got the HTML.
+            msg('{} visibility set to True'.format(e_summary(entry)))
+            updates['is_visible'] = entry['is_visible'] = True
+        if entry['is_deleted']:
+            # Obviously it's not deleted if we got the HTML.
+            msg('{} deleted state set to False'.format(e_summary(entry)))
+            updates['is_deleted'] = entry['is_deleted'] = False
         if page.owner() != entry['owner']:
             msg('{} owner changed to {}'.format(e_summary(entry), page.owner()))
             updates['owner'] = entry['owner'] = page.owner()
@@ -489,9 +497,12 @@ class GitHubIndexer():
             self.db.update({'_id': entry['_id']},
                            {'$set': updates},
                            upsert=False)
-        if page.forked_from() and not entry['fork']:
+
+        if (not entry['fork'] and page.forked_from()) \
+           or (not page.forked_from() and entry['fork'] \
+               and (entry['fork']['root'] or entry['fork']['parent'])):
             msg('updated fork info for {}'.format(e_summary(entry)))
-            update_entry_fork_field(entry, page.forked_from(), None)
+            self.update_entry_fork_field(entry, page.forked_from(), None)
         elif not updates:
             msg('{} has no changes'.format(e_summary(entry)))
         return entry
@@ -906,8 +917,6 @@ class GitHubIndexer():
                 msg('LANGUAGES:')
             if entry['fork'] and entry['fork']['parent']:
                 fork_status = 'Yes, forked from ' + entry['fork']['parent']
-            elif entry['fork']:
-                fork_status = 'Yes'
             else:
                 fork_status = 'No'
             msg('FORK:'.ljust(width), fork_status)
