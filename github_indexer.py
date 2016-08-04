@@ -356,22 +356,23 @@ class GitHubIndexer():
 
     def update_entry_from_github3(self, entry, repo, force=False):
         # Update or delete entry, based on repo object from github3 API.
+        summary = e_summary(entry)
         if not repo:
             # The repo must have existed at some point because we have it in
             # our database, but the API no longer returns it for this
             # owner/name combination.
-            msg('*** {} no longer found -- marking deleted'.format(e_summary(entry)))
+            msg('*** {} no longer found -- marking deleted'.format(summary))
             self.mark_entry_deleted(entry)
             return None
         elif entry['_id'] != repo.id:
             # Same owner & name, but different id.  It might have been
             # deleted and recreated by the user (which would generate a new
             # id in GitHub).  Create a new entry for the updated _id.
-            msg('*** {} id changed -- creating #{}'.format(e_summary(entry), repo.id))
+            msg('*** {} id changed -- creating #{}'.format(summary, repo.id))
             (_, new_entry) = self.add_entry_from_github3(repo, True)
             # Mark the old entry as deleted.
             self.mark_entry_deleted(entry)
-            msg('{} marked as deleted'.format(e_summary(entry)))
+            msg('{} marked as deleted'.format(summary))
             return new_entry
 
         # Since github3 accesses the live github API, whatever data we get,
@@ -382,38 +383,38 @@ class GitHubIndexer():
         updates = {}
         if entry['is_deleted'] != False:
             # We found it via github3 => not deleted.
-            msg('{} deleted status set to False'.format(e_summary(entry)))
+            msg('{} deleted status set to False'.format(summary))
             updates['is_deleted'] = entry['is_deleted'] = False
         if entry['is_visible'] != bool(not repo.private):
-            msg('{} visibility changed to {}'.format(e_summary(entry), not repo.private))
+            msg('{} visibility changed to {}'.format(summary, not repo.private))
             updates['is_visible'] = entry['is_visible'] = bool(not repo.private)
         if entry['owner'] != repo.owner.login:
-            msg('{} owner changed to {}'.format(e_summary(entry), repo.owner.login))
+            msg('{} owner changed to {}'.format(summary, repo.owner.login))
             updates['owner'] = entry['owner'] = repo.owner.login
         if entry['name'] != repo.name:
-            msg('{} repo name changed to {}'.format(e_summary(entry), repo.name))
+            msg('{} repo name changed to {}'.format(summary, repo.name))
             updates['name'] = entry['name'] = repo.name
         if entry['description'] != repo.description.strip():
-            msg('{} description changed'.format(e_summary(entry)))
+            msg('{} description changed'.format(summary))
             updates['description'] = entry['description'] = repo.description.strip()
         if entry['default_branch'] != repo.default_branch:
-            msg('{} default_branch changed to {}'.format(e_summary(entry), repo.default_branch))
+            msg('{} default_branch changed to {}'.format(summary, repo.default_branch))
             updates['default_branch'] = entry['default_branch'] = repo.default_branch
         if entry['homepage'] != repo.homepage:
-            msg('{} homepage changed to {}'.format(e_summary(entry), repo.homepage))
+            msg('{} homepage changed to {}'.format(summary, repo.homepage))
             updates['homepage'] = entry['homepage'] = repo.homepage
 
         if repo.language and (not entry['languages'] or entry['languages'] == -1):
             # We may add more languages than the single language returned by
             # the API, so we don't overwrite this field unless we have nothing.
-            msg('added language for {}'.format(e_summary(entry)))
+            msg('added language for {}'.format(summary))
             updates['languages'] = entry['languages'] = [{'name': repo.language}]
 
         if repo.fork:
             fork = make_fork(repo.parent.full_name if repo.parent else '',
                              repo.source.full_name if repo.source else '')
             if fork != entry['fork']:
-                msg('updated fork info for {}'.format(e_summary(entry)))
+                msg('updated fork info for {}'.format(summary))
                 updates['fork'] = entry['fork'] = fork
         elif entry['fork']:
             # We have something for fork, but are not supposed to.
@@ -444,12 +445,12 @@ class GitHubIndexer():
            or 'time.repo_pushed' in updates:
             entry['time']['data_refreshed'] = now_timestamp()
             updates['time.data_refreshed'] = entry['time']['data_refreshed']
-            msg('updated time info for {}'.format(e_summary(entry)))
+            msg('updated time info for {}'.format(summary))
 
         if updates:
             self.db.update({'_id': entry['_id']}, {'$set': updates}, upsert=False)
         else:
-            msg('{} has no changes'.format(e_summary(entry)))
+            msg('{} has no changes'.format(summary))
         return entry
 
 
@@ -459,29 +460,30 @@ class GitHubIndexer():
             self.mark_entry_invisible(entry)
             return None
         updates = {}
+        summary = e_summary(entry)
         if not entry['is_visible']:
             # Obviously it's visible if we got the HTML.
-            msg('{} visibility set to True'.format(e_summary(entry)))
+            msg('{} visibility set to True'.format(summary))
             updates['is_visible'] = entry['is_visible'] = True
         if entry['is_deleted']:
             # Obviously it's not deleted if we got the HTML.
-            msg('{} deleted state set to False'.format(e_summary(entry)))
+            msg('{} deleted state set to False'.format(summary))
             updates['is_deleted'] = entry['is_deleted'] = False
         if page.owner() != entry['owner']:
-            msg('{} owner changed to {}'.format(e_summary(entry), page.owner()))
+            msg('{} owner changed to {}'.format(summary, page.owner()))
             updates['owner'] = entry['owner'] = page.owner()
         if page.name() != entry['name']:
-            msg('{} repo name changed to {}'.format(e_summary(entry), page.name()))
+            msg('{} repo name changed to {}'.format(summary, page.name()))
             updates['name'] = entry['name'] = page.name()
         if page.description() != entry['description']:
-            msg('added description for {}'.format(e_summary(entry)))
+            msg('added description for {}'.format(summary))
             updates['description'] = entry['description'] = page.description()
         if page.default_branch() != entry['default_branch']:
-            msg('{} default_branch set to {}'.format(e_summary(entry), page.default_branch()))
+            msg('{} default_branch set to {}'.format(summary, page.default_branch()))
             updates['default_branch'] = entry['default_branch'] = page.default_branch()
         if page.files() != entry['files']:
             num = len(page.files()) if (page.files() and page.files() != -1) else 0
-            msg('added {} files for {}'.format(num, e_summary(entry)))
+            msg('added {} files for {}'.format(num, summary))
             updates['files'] = entry['files'] = page.files()
         if page.languages() != e_languages(entry):
             page_lang = page.languages()
@@ -489,7 +491,7 @@ class GitHubIndexer():
             if num_lang > 0 and (not entry['languages'] or entry['languages'] == -1):
                 # The HTML pages don't always have languages. Don't reset our
                 # value if we don't actually pull something out of the HTML.
-                msg('added {} languages for {}'.format(num_lang, e_summary(entry)))
+                msg('added {} languages for {}'.format(num_lang, summary))
                 updates['languages'] = entry['languages'] = make_languages(page_lang)
         if updates:
             updates['time.data_refreshed'] = now_timestamp()
@@ -501,10 +503,10 @@ class GitHubIndexer():
         if (not entry['fork'] and page.forked_from()) \
            or (not page.forked_from() and entry['fork'] \
                and (entry['fork']['root'] or entry['fork']['parent'])):
-            msg('updated fork info for {}'.format(e_summary(entry)))
+            msg('updated fork info for {}'.format(summary))
             self.update_entry_fork_field(entry, page.forked_from(), None)
         elif not updates:
-            msg('{} has no changes'.format(e_summary(entry)))
+            msg('{} has no changes'.format(summary))
         return entry
 
 
