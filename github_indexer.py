@@ -24,14 +24,14 @@ import humanize
 import socket
 from base64 import b64encode
 from datetime import datetime
-from subprocess import PIPE, DEVNULL, Popen
-from threading import Timer
 from time import time, sleep
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../common"))
 sys.path.append(os.path.join(os.path.dirname(__file__), "../database"))
 from casicsdb import *
 from utils import *
+from content_inferencer import *
+from github_html import *
 
 
 # Summary
@@ -67,890 +67,6 @@ def msg_bad(thing):
         msg('*** {} not an id or an "owner/name" string ***'.format(thing))
     else:
         msg('*** unrecognize type of thing: "{}" ***'.format(thing))
-
-
-def shell_cmd(args, max_time=5):
-    # 'max_time' is in sec.
-    # Based in part on http://stackoverflow.com/a/10768774/743730
-
-    def kill_proc(proc, timeout):
-        timeout['value'] = True
-        proc.kill()
-
-    proc = Popen(args, stdout=PIPE, stderr=PIPE, stdin=PIPE, preexec_fn=os.setsid)
-    timeout = {'value': False}
-    timer = Timer(max_time, kill_proc, [proc, timeout])
-    timer.start()
-    stdout, stderr = proc.communicate()
-    timer.cancel()
-    return proc.returncode, stdout.decode("utf-8"), stderr.decode("utf-8")
-
-
-# Based on http://stackoverflow.com/a/14491059/743730
-def flatten(the_list):
-    for item in the_list:
-        try:
-            yield from flatten(item)
-        except TypeError:
-            yield item
-
-# Code to normalize language names.
-# List came from our first database approach to cataloging github repos.
-lang_names = {
-    # Lang name: is it for code?}
-    "ABAP"                           : True,
-    "ABC"                            : True,
-    "AGS Script"                     : True,
-    "AMPL"                           : True,
-    "ANTLR"                          : True,
-    "API Blueprint"                  : True,
-    "APL"                            : True,
-    "ASP"                            : True,
-    "ATLAS"                          : True,
-    "ATS"                            : True,
-    "ActionScript"                   : True,
-    "Ada"                            : True,
-    "Agda"                           : True,
-    "AgilentVEE"                     : True,
-    "Algol"                          : True,
-    "Alice"                          : True,
-    "Alloy"                          : True,
-    "Angelscript"                    : True,
-    "Ant Build System"               : True,
-    "ApacheConf"                     : True,
-    "Apex"                           : True,
-    "AppleScript"                    : True,
-    "Arc"                            : True,
-    "Arduino"                        : True,
-    "AsciiDoc"                       : False,
-    "AspectJ"                        : True,
-    "Assembly"                       : True,
-    "Augeas"                         : True,
-    "AutoHotkey"                     : True,
-    "AutoIt"                         : True,
-    "AutoLISP"                       : True,
-    "Automator"                      : True,
-    "Avenue"                         : True,
-    "Awk"                            : True,
-    "BASIC"                          : True,
-    "BCPL"                           : True,
-    "BETA"                           : True,
-    "Bash"                           : True,
-    "Batchfile"                      : True,
-    "BeanShell"                      : True,
-    "Befunge"                        : True,
-    "Bison"                          : True,
-    "BitBake"                        : True,
-    "BlitzBasic"                     : True,
-    "BlitzMax"                       : True,
-    "Bluespec"                       : True,
-    "Boo"                            : True,
-    "BourneShell"                    : True,
-    "Brainfuck"                      : True,
-    "Brightscript"                   : True,
-    "Bro"                            : True,
-    "C"                              : True,
-    "C#"                             : True,
-    "C++"                            : True,
-    "C-ObjDump"                      : True,
-    "C2hs Haskell"                   : True,
-    "CFML"                           : True,
-    "CHILL"                          : True,
-    "CIL"                            : True,
-    "CLIPS"                          : True,
-    "CLU"                            : True,
-    "CMake"                          : True,
-    "COBOL"                          : True,
-    "COMAL"                          : True,
-    "COmega"                         : True,
-    "CPL"                            : True,
-    "CSS"                            : True,
-    "CShell"                         : True,
-    "Caml"                           : True,
-    "Cap&#39;n Proto"                : True,
-    "Cap'n Proto"                    : True,
-    "CartoCSS"                       : True,
-    "Ceylon"                         : True,
-    "Ch"                             : True,
-    "Chapel"                         : True,
-    "Charity"                        : True,
-    "Chef"                           : True,
-    "ChucK"                          : True,
-    "Cirru"                          : True,
-    "Clarion"                        : True,
-    "Clean"                          : True,
-    "Clipper"                        : True,
-    "Clojure"                        : True,
-    "Cobra"                          : True,
-    "CoffeeScript"                   : True,
-    "ColdFusion CFC"                 : True,
-    "ColdFusion"                     : True,
-    "Common Lisp"                    : True,
-    "Component Pascal"               : True,
-    "Cool"                           : True,
-    "Coq"                            : True,
-    "Cpp-ObjDump"                    : True,
-    "Creole"                         : True,
-    "Crystal"                        : True,
-    "Cucumber"                       : True,
-    "Cuda"                           : True,
-    "Curl"                           : True,
-    "Cycript"                        : True,
-    "Cython"                         : True,
-    "D"                              : True,
-    "D-ObjDump"                      : True,
-    "DCL"                            : True,
-    "DCPU-16 ASM"                    : True,
-    "DCPU16ASM"                      : True,
-    "DIGITAL Command Language"       : True,
-    "DM"                             : True,
-    "DNS Zone"                       : True,
-    "DOT"                            : True,
-    "DTrace"                         : True,
-    "Darcs Patch"                    : True,
-    "Dart"                           : True,
-    "Delphi"                         : True,
-    "DiBOL"                          : True,
-    "Diff"                           : True,
-    "Dockerfile"                     : True,
-    "Dogescript"                     : True,
-    "Dylan"                          : True,
-    "E"                              : True,
-    "ECL"                            : True,
-    "ECLiPSe"                        : True,
-    "ECMAScript"                     : True,
-    "EGL"                            : True,
-    "EPL"                            : True,
-    "EXEC"                           : True,
-    "Eagle"                          : True,
-    "Ecere Projects"                 : True,
-    "Ecl"                            : True,
-    "Eiffel"                         : True,
-    "Elixir"                         : True,
-    "Elm"                            : True,
-    "Emacs Lisp"                     : True,
-    "EmberScript"                    : True,
-    "Erlang"                         : True,
-    "Escher"                         : True,
-    "Etoys"                          : True,
-    "Euclid"                         : True,
-    "Euphoria"                       : True,
-    "F#"                             : True,
-    "FLUX"                           : True,
-    "FORTRAN"                        : True,
-    "Factor"                         : True,
-    "Falcon"                         : True,
-    "Fancy"                          : True,
-    "Fantom"                         : True,
-    "Felix"                          : True,
-    "Filterscript"                   : True,
-    "Formatted"                      : False,
-    "Forth"                          : True,
-    "Fortress"                       : True,
-    "FourthDimension 4D"             : True,
-    "FreeMarker"                     : True,
-    "Frege"                          : True,
-    "G-code"                         : True,
-    "GAMS"                           : True,
-    "GAP"                            : True,
-    "GAS"                            : True,
-    "GDScript"                       : True,
-    "GLSL"                           : True,
-    "GNU Octave"                     : True,
-    "Gambas"                         : True,
-    "Game Maker Language"            : True,
-    "Genshi"                         : True,
-    "Gentoo Ebuild"                  : True,
-    "Gentoo Eclass"                  : True,
-    "Gettext Catalog"                : True,
-    "Glyph"                          : True,
-    "Gnuplot"                        : True,
-    "Go"                             : True,
-    "Golo"                           : True,
-    "GoogleAppsScript"               : True,
-    "Gosu"                           : True,
-    "Grace"                          : True,
-    "Gradle"                         : True,
-    "Grammatical Framework"          : False,
-    "Graph Modeling Language"        : True,
-    "Graphviz DOT"                   : True,
-    "Groff"                          : False,
-    "Groovy Server Pages"            : True,
-    "Groovy"                         : True,
-    "HCL"                            : True,
-    "HPL"                            : True,
-    "HTML"                           : False,
-    "HTML+Django"                    : True,
-    "HTML+EEX"                       : True,
-    "HTML+ERB"                       : True,
-    "HTML+PHP"                       : True,
-    "HTTP"                           : True,
-    "Hack"                           : True,
-    "Haml"                           : True,
-    "Handlebars"                     : True,
-    "Harbour"                        : True,
-    "Haskell"                        : True,
-    "Haxe"                           : True,
-    "Heron"                          : True,
-    "Hy"                             : True,
-    "HyPhy"                          : True,
-    "HyperTalk"                      : True,
-    "IDL"                            : True,
-    "IGOR Pro"                       : True,
-    "INI"                            : True,
-    "INTERCAL"                       : True,
-    "IRC log"                        : True,
-    "Icon"                           : True,
-    "Idris"                          : True,
-    "Inform 7"                       : True,
-    "Inform"                         : True,
-    "Informix 4GL"                   : True,
-    "Inno Setup"                     : True,
-    "Io"                             : True,
-    "Ioke"                           : True,
-    "Isabelle ROOT"                  : True,
-    "Isabelle"                       : True,
-    "J"                              : True,
-    "J#"                             : True,
-    "JADE"                           : True,
-    "JFlex"                          : True,
-    "JSON"                           : False,
-    "JSON5"                          : False,
-    "JSONLD"                         : False,
-    "JSONiq"                         : False,
-    "JSX"                            : True,
-    "JScript"                        : True,
-    "JScript.NET"                    : True,
-    "Jade"                           : True,
-    "Jasmin"                         : True,
-    "Java Server Pages"              : True,
-    "Java"                           : True,
-    "JavaFXScript"                   : True,
-    "JavaScript"                     : True,
-    "Julia"                          : True,
-    "Jupyter Notebook"               : False,
-    "KRL"                            : True,
-    "KiCad"                          : True,
-    "Kit"                            : True,
-    "KornShell"                      : True,
-    "Kotlin"                         : True,
-    "LFE"                            : True,
-    "LLVM"                           : True,
-    "LOLCODE"                        : True,
-    "LPC"                            : True,
-    "LSL"                            : True,
-    "LaTeX"                          : False,
-    "LabVIEW"                        : True,
-    "LadderLogic"                    : True,
-    "Lasso"                          : True,
-    "Latte"                          : True,
-    "Lean"                           : True,
-    "Less"                           : True,
-    "Lex"                            : True,
-    "LilyPond"                       : True,
-    "Limbo"                          : True,
-    "Lingo"                          : True,
-    "Linker Script"                  : True,
-    "Linux Kernel Module"            : True,
-    "Liquid"                         : True,
-    "Lisp"                           : True,
-    "Literate Agda"                  : True,
-    "Literate CoffeeScript"          : True,
-    "Literate Haskell"               : True,
-    "LiveScript"                     : True,
-    "Logo"                           : True,
-    "Logos"                          : True,
-    "Logtalk"                        : True,
-    "LookML"                         : True,
-    "LoomScript"                     : True,
-    "LotusScript"                    : True,
-    "Lua"                            : True,
-    "Lucid"                          : True,
-    "Lustre"                         : True,
-    "M"                              : True,
-    "M4"                             : True,
-    "MAD"                            : True,
-    "MANTIS"                         : True,
-    "MAXScript"                      : True,
-    "MDL"                            : True,
-    "MEL"                            : True,
-    "ML"                             : True,
-    "MOO"                            : True,
-    "MSDOSBatch"                     : True,
-    "MTML"                           : True,
-    "MUF"                            : True,
-    "MUMPS"                          : True,
-    "Magic"                          : True,
-    "Magik"                          : True,
-    "Makefile"                       : True,
-    "Mako"                           : True,
-    "Malbolge"                       : True,
-    "Maple"                          : True,
-    "Markdown"                       : False,
-    "Mask"                           : True,
-    "Mathematica"                    : True,
-    "Matlab"                         : True,
-    "Maven POM"                      : True,
-    "Max"                            : True,
-    "MaxMSP"                         : True,
-    "MediaWiki"                      : True,
-    "Mercury"                        : True,
-    "Metal"                          : True,
-    "MiniD"                          : True,
-    "Mirah"                          : True,
-    "Miva"                           : True,
-    "Modelica"                       : True,
-    "Modula-2"                       : True,
-    "Modula-3"                       : True,
-    "Module Management System"       : True,
-    "Monkey"                         : True,
-    "Moocode"                        : True,
-    "MoonScript"                     : True,
-    "Moto"                           : True,
-    "Myghty"                         : True,
-    "NATURAL"                        : True,
-    "NCL"                            : True,
-    "NL"                             : True,
-    "NQC"                            : True,
-    "NSIS"                           : True,
-    "NXTG"                           : True,
-    "Nemerle"                        : True,
-    "NetLinx"                        : True,
-    "NetLinx+ERB"                    : True,
-    "NetLogo"                        : True,
-    "NewLisp"                        : True,
-    "Nginx"                          : True,
-    "Nimrod"                         : True,
-    "Ninja"                          : True,
-    "Nit"                            : True,
-    "Nix"                            : True,
-    "Nu"                             : True,
-    "NumPy"                          : True,
-    "OCaml"                          : True,
-    "OPL"                            : True,
-    "Oberon"                         : True,
-    "ObjDump"                        : True,
-    "Object Rexx"                    : True,
-    "Objective-C"                    : True,
-    "Objective-C++"                  : True,
-    "Objective-J"                    : True,
-    "Occam"                          : True,
-    "Omgrofl"                        : True,
-    "Opa"                            : True,
-    "Opal"                           : True,
-    "OpenCL"                         : True,
-    "OpenEdge ABL"                   : True,
-    "OpenEdgeABL"                    : True,
-    "OpenSCAD"                       : True,
-    "Org"                            : True,
-    "Ox"                             : True,
-    "Oxygene"                        : True,
-    "Oz"                             : True,
-    "PAWN"                           : True,
-    "PHP"                            : True,
-    "PILOT"                          : True,
-    "PLI"                            : True,
-    "PLSQL"                          : True,
-    "PLpgSQL"                        : True,
-    "POVRay"                         : True,
-    "Pan"                            : True,
-    "Papyrus"                        : True,
-    "Paradox"                        : True,
-    "Parrot Assembly"                : True,
-    "Parrot Internal Representation" : True,
-    "Parrot"                         : True,
-    "Pascal"                         : True,
-    "Perl"                           : True,
-    "Perl6"                          : True,
-    "PicoLisp"                       : True,
-    "PigLatin"                       : True,
-    "Pike"                           : True,
-    "Pliant"                         : True,
-    "Pod"                            : False,
-    "PogoScript"                     : True,
-    "PostScript"                     : False,
-    "PowerBasic"                     : True,
-    "PowerScript"                    : True,
-    "PowerShell"                     : True,
-    "Processing"                     : True,
-    "Prolog"                         : True,
-    "Propeller Spin"                 : True,
-    "Protocol Buffer"                : True,
-    "Public Key"                     : False,
-    "Puppet"                         : True,
-    "Pure Data"                      : True,
-    "PureBasic"                      : True,
-    "PureData"                       : True,
-    "PureScript"                     : True,
-    "Python traceback"               : True,
-    "Python"                         : True,
-    "Q"                              : True,
-    "QML"                            : True,
-    "QMake"                          : True,
-    "R"                              : True,
-    "RAML"                           : True,
-    "RDoc"                           : False,
-    "REALbasic"                      : True,
-    "REALbasicDuplicate"             : True,
-    "REBOL"                          : True,
-    "REXX"                           : True,
-    "RHTML"                          : True,
-    "RMarkdown"                      : True,
-    "RPGOS400"                       : True,
-    "Racket"                         : True,
-    "Ragel in Ruby Host"             : True,
-    "Ratfor"                         : True,
-    "Raw token data"                 : True,
-    "Rebol"                          : True,
-    "Red"                            : True,
-    "Redcode"                        : True,
-    "RenderScript"                   : True,
-    "Revolution"                     : True,
-    "RobotFramework"                 : True,
-    "Rouge"                          : True,
-    "Ruby"                           : True,
-    "Rust"                           : True,
-    "S"                              : True,
-    "SAS"                            : True,
-    "SCSS"                           : True,
-    "SIGNAL"                         : True,
-    "SMT"                            : True,
-    "SPARK"                          : True,
-    "SPARQL"                         : True,
-    "SPLUS"                          : True,
-    "SPSS"                           : True,
-    "SQF"                            : True,
-    "SQL"                            : True,
-    "SQLPL"                          : True,
-    "SQR"                            : True,
-    "STON"                           : True,
-    "SVG"                            : False,
-    "Sage"                           : True,
-    "SaltStack"                      : True,
-    "Sass"                           : True,
-    "Sather"                         : True,
-    "Scala"                          : True,
-    "Scaml"                          : True,
-    "Scheme"                         : True,
-    "Scilab"                         : True,
-    "Scratch"                        : True,
-    "Seed7"                          : True,
-    "Self"                           : True,
-    "Shell"                          : True,
-    "ShellSession"                   : True,
-    "Shen"                           : True,
-    "Simula"                         : True,
-    "Simulink"                       : True,
-    "Slash"                          : True,
-    "Slate"                          : True,
-    "Slim"                           : True,
-    "Smali"                          : True,
-    "Smalltalk"                      : True,
-    "Smarty"                         : True,
-    "SourcePawn"                     : True,
-    "Squeak"                         : True,
-    "Squirrel"                       : True,
-    "Standard ML"                    : True,
-    "Stata"                          : True,
-    "Stylus"                         : True,
-    "Suneido"                        : True,
-    "SuperCollider"                  : True,
-    "Swift"                          : True,
-    "SystemVerilog"                  : True,
-    "TACL"                           : True,
-    "TOM"                            : True,
-    "TOML"                           : True,
-    "TXL"                            : True,
-    "Tcl"                            : True,
-    "Tcsh"                           : True,
-    "TeX"                            : False,
-    "Tea"                            : True,
-    "Text"                           : True,
-    "Textile"                        : False,
-    "Thrift"                         : True,
-    "Transact-SQL"                   : True,
-    "Turing"                         : True,
-    "Turtle"                         : True,
-    "Twig"                           : True,
-    "TypeScript"                     : True,
-    "Unified Parallel C"             : True,
-    "Unity3D Asset"                  : True,
-    "UnrealScript"                   : True,
-    "VBScript"                       : True,
-    "VCL"                            : True,
-    "VHDL"                           : True,
-    "Vala"                           : True,
-    "Verilog"                        : True,
-    "VimL"                           : True,
-    "Visual Basic"                   : True,
-    "Visual Basic.NET"               : True,
-    "Visual Fortran"                 : True,
-    "Visual FoxPro"                  : True,
-    "Volt"                           : True,
-    "Vue"                            : True,
-    "Web Ontology Language"          : False,
-    "WebDNA"                         : True,
-    "WebIDL"                         : True,
-    "Whitespace"                     : True,
-    "Wolfram Language"               : True,
-    "X10"                            : True,
-    "XBase++"                        : True,
-    "XC"                             : True,
-    "XML"                            : True,
-    "XPL"                            : True,
-    "XPages"                         : True,
-    "XProc"                          : True,
-    "XQuery"                         : True,
-    "XS"                             : True,
-    "XSLT"                           : True,
-    "Xen"                            : True,
-    "Xojo"                           : True,
-    "Xtend"                          : True,
-    "YAML"                           : True,
-    "Yacc"                           : True,
-    "Yorick"                         : True,
-    "Zephir"                         : True,
-    "Zimpl"                          : True,
-    "Zshell"                         : True,
-    "bc"                             : True,
-    "cT"                             : True,
-    "cg"                             : True,
-    "dBase"                          : True,
-    "desktop"                        : True,
-    "eC"                             : True,
-    "edn"                            : True,
-    "fish"                           : True,
-    "haXe"                           : True,
-    "ksh"                            : True,
-    "mupad"                          : True,
-    "nesC"                           : True,
-    "ooc"                            : True,
-    "reStructuredText"               : False,
-    "sed"                            : True,
-    "thinBasic"                      : True,
-    "wisp"                           : True,
-    "xBase"                          : True,
-    "Other"                          : False,
-}
-lang_names_nocase = {k.lower():v for k,v in lang_names.items()}
-
-def known_code_lang(lang):
-    lang = lang.lower()
-    if lang in lang_names_nocase:
-        return lang_names_nocase[lang]
-    else:
-        return False
-
-# code_files and noncode_files are taken literally, without file
-# extensions of any kind, and matched in a case-insensitive way.
-#
-code_files = [
-    'build.xml',
-    'capfile',
-    'gemfile',
-    'makefile',
-    'pom.xml',
-    'rakefile',
-]
-
-noncode_files = [
-    '.config',
-    '.ds_store',
-    '.editorconfig',
-    '.gitattributes',
-    '.gitconfig',
-    '.gitignore',
-    '.gitmodules',
-    'license',
-    'readme',
-    'contributors',
-    'authors'
-]
-
-# FIXME: this list is incomplete
-#
-# FIXME: The following purposefully omits some files like php because it's
-# unclear whether we should take them as a sign of being about code or docs.
-# (An html-based documentation set could have an index.php file, for example,
-# and would probably be something we'd not want to classify as code.)  Needs
-# resolving what really counts as code.
-#
-code_file_extensions = [
-    'ac',
-    'action',
-    'ada',
-    'agc',
-    'ahk',
-    'am',
-    'as',
-    'asc',
-    'ascx',
-    'asm',
-    'aspx',
-    'axd',
-    'axs',
-    'bal',
-    'bas',
-    'bash',
-    'bat',
-    'bpr',
-    'bsc',
-    'bsh',
-    'c',
-    'c++',
-    'cbl',
-    'cc',
-    'cfm',
-    'cgi',
-    'cla',
-    'class',
-    'cls',
-    'cmd',
-    'coffee',
-    'cp',
-    'cpp',
-    'cs',
-    'csh',
-    'ctl',
-    'cxx',
-    'dep',
-    'dfn',
-    'dlg',
-    'dot',
-    'dpk',
-    'dpr',
-    'ejs',
-    'exp',
-    'f',
-    'f90',
-    'f95',
-    'fas',
-    'for',
-    'fs',
-    'fsx',
-    'gch',
-    'gcl',
-    'groovy',
-    'gs',
-    'h',
-    'hs',
-    'hx',
-    'ino',
-    'ins',
-    'irc',
-    'jav',
-    'java',
-    'jml',
-    'js',
-    'jsc',
-    'jse',
-    'jsp',
-    'ksh',
-    'l',
-    'lap',
-    'lib',
-    'lisp',
-    'lmv',
-    'lsp',
-    'lst',
-    'lua',
-    'luac',
-    'm',
-    'm4',
-    'mak',
-    'make',
-    'matlab',
-    'mcp',
-    'mdp',
-    'mf',
-    'mk',
-    'mk',
-    'ml',
-    'mod',
-    'msvc',
-    'o',
-    'obj',
-    'pas',
-    'pdb',
-    'perl',
-    'ph',
-    'pl',
-    'pm',
-    'pri',
-    'prl',
-    'pro',
-    'ptx',
-    'py',
-    'pyc',
-    'pyo',
-    'pyw',
-    'qs',
-    'r',
-    'rb',
-    'rbw',
-    'rc',
-    'rh',
-    'rpg',
-    'rule',
-    'run',
-    'sbr',
-    'scala',
-    'sct',
-    'sh',
-    'ss',
-    'swift',
-    'swt',
-    'tcl',
-    'tru',
-    'vb',
-    'vba',
-    'vbe',
-    'vbi',
-    'vbs',
-    'vbx',
-    'vcxproj/',
-    'wbt',
-    'ws',
-    'wsdl',
-    'wsf',
-    'xcodeproj/',
-    'xla',
-    'xlm',
-    'xsc',
-    'xslt',
-    'xul',
-    'zero',
-    'zsh',
-]
-
-# FIXME: this list is incomplete.
-#
-# This purposefully omits .html & .htm files because someone could put
-# javascript inside HTML files.  Ditto for .xml and the possibility of XSLT.
-#
-noncode_file_extensions = [
-    'ascii',
-    'avi',
-    'bbl',
-    'bib',
-    'bibtex',
-    'bmp',
-    'conf',
-    'csv',
-    'dbx',
-    'doc',
-    'docx',
-    'dvi',
-    'enex',
-    'enw',
-    'epdf',
-    'epub',
-    'fdf',
-    'gif',
-    'help',
-    'jpeg',
-    'jpg',
-    'm4a',
-    'm4p',
-    'man',
-    'markdown',
-    'md',
-    'mdown',
-    'mdwn',
-    'mov',
-    'mp3',
-    'mp4',
-    'mp4a',
-    'mpeg',
-    'mpg',
-    'nbib',
-    'odc',
-    'odp',
-    'ods',
-    'odt',
-    'ogg',
-    'opml',
-    'opx',
-    'oxps',
-    'oxt',
-    'pcl',
-    'pdf',
-    'pdfa',
-    'pict',
-    'plist',
-    'pmd',
-    'png',
-    'pod',
-    'ppdf',
-    'ppsx',
-    'ppt',
-    'pptx',
-    'ps',
-    'pub',
-    'raw',
-    'roff',
-    'rtf',
-    'sgml',
-    'snd',
-    'tbl',
-    'tex',
-    'text',
-    'textile',
-    'tif',
-    'tiff',
-    'txt',
-    'vcard',
-    'vsd',
-    'wav',
-    'wma',
-    'wps',
-    'xgmml',
-    'yml',
-]
-
-def is_code_file(name):
-    return name.lower() in code_files
-
-def is_noncode_file(name):
-    return name.lower() in noncode_files
-
-def has_code_extension(name):
-    return name.split(".")[-1].lower() in code_file_extensions
-
-def has_noncode_extension(name):
-    return name.split(".")[-1].lower() in noncode_file_extensions
-
-
-# Utilities for working with our MongoDB contents.
-# .............................................................................
-
-def e_path(entry):
-    return entry['owner'] + '/' + entry['name']
-
-
-def e_summary(entry):
-    return '{} (#{})'.format(e_path(entry), entry['_id'])
-
-
-def e_languages(entry):
-    if not entry['languages']:
-        return []
-    elif entry['languages'] == -1:
-        return -1
-    elif isinstance(entry['languages'], list):
-        return [lang['name'] for lang in entry['languages']]
-    else:
-        # This shouldn't happen.
-        return entry['languages']
-
-
-def make_lang_value(langs):
-    langs = [langs] if not isinstance(langs, list) else langs
-    return [{'name': lang} for lang in langs]
-
-
-def make_content_value(content, method='file names'):
-    return {'content': content, 'basis': method}
 
 
 # Error classes for internal communication.
@@ -1048,16 +164,19 @@ class GitHubIndexer():
             # Don't retry unless the problem may be transient.
             retry = False
             try:
-                return self.github().repository(owner, name)
+                return (True, self.github().repository(owner, name))
             except github3.GitHubError as err:
                 if err.code == 403:
+                    # This can happen for rate limits, and also when there is
+                    # a disk error or other problem on GitHub.  (Yes, it's
+                    # happened.)
                     if self.api_calls_left() < 1:
                         self.wait_for_reset()
                         failures += 1
                         retry = True
                     else:
                         msg('GitHb code 403 for {}/{}'.format(owner, name))
-                        break
+                        return (False, None)
                 elif err.code == 451:
                     # https://developer.github.com/changes/2016-03-17-the-451-status-code-is-now-supported/
                     msg('GitHub code 451 (blocked) for {}/{}'.format(owner, name))
@@ -1071,8 +190,8 @@ class GitHubIndexer():
             except Exception as err:
                 msg('Exception for {}/{}: {}'.format(owner, name, err))
                 # Something even more unexpected.
-                break
-        return None
+                return (False, None)
+        return (True, None)
 
 
     def direct_api_call(self, url):
@@ -1144,7 +263,9 @@ class GitHubIndexer():
                 return None
         conn.request('HEAD', url_path)
         resp = conn.getresponse()
-        if resp.status < 400:
+        if resp.status == 200:
+            return url_path
+        elif resp.status < 400:
             return resp.headers['Location']
         else:
             return False
@@ -1158,11 +279,14 @@ class GitHubIndexer():
         elif url.startswith('http'):
             path = url[18:]
             return (path[:path.find('/')], path[path.find('/') +1:])
+        elif url.startswith('/'):
+            path = url[1:]
+            return (path[:path.find('/')], path[path.find('/') +1:])
         else:
             return (None, None)
 
 
-    def get_github_iterator(self, last_seen=None, start_id=None):
+    def github_iterator(self, last_seen=None, start_id=None):
         try:
             if last_seen or start_id:
                 since = last_seen or start_id
@@ -1174,119 +298,9 @@ class GitHubIndexer():
             sys.exit(1)
 
 
-    def get_search_iterator(self, query, last_seen=None):
-        try:
-            if last_seen:
-                return self.github().search_repositories(query, since=last_seen)
-            else:
-                return self.github().search_repositories(query)
-        except Exception as err:
-            msg('github.search_repositories() failed with {0}'.format(err))
-            sys.exit(1)
-
-
-    def get_last_seen_id(self):
+    def last_seen_id(self):
         last = self.db.find_one({'$query':{}, '$orderby':{'_id':-1}}, {})
         return last['_id']
-
-
-    def get_home_page(self, entry, owner=None, name=None):
-        count = 3
-        while count > 0:
-            r = requests.get(self.github_url(entry, owner, name))
-            if r.status_code == 202:
-                sleep(0.5)
-                count -= 1
-                continue
-            return (r.status_code, r.text)
-
-
-    def add_entry(self, entry):
-        self.db.insert_one(entry)
-
-
-    def update_entry(self, entry):
-        self.db.replace_one({'_id' : entry['_id']}, entry)
-
-
-    def update_field(self, entry, field, value):
-        entry[field] = value
-        now = now_timestamp()
-        self.db.update({'_id': entry['_id']},
-                       {'$set': {field: value,
-                                 'time.data_refreshed': now}})
-        # Update this so that the object being held by the caller reflects
-        # what was written to the database.
-        entry['time']['data_refreshed'] = now
-
-
-    def push_field(self, entry, field, value):
-        # Don't push duplicate items.
-        if value in entry[field]:
-            return
-        entry[field].append(value)
-        now = now_timestamp()
-        self.db.update({'_id': entry['_id']},
-                       {'$addToSet': {field: value},
-                        '$set':      {'time.data_refreshed': now}})
-        # Update this so that the object being held by the caller reflects
-        # what was written to the database.
-        entry['time']['data_refreshed'] = now
-
-
-    def update_fork_field(self, entry, fork_parent, fork_root):
-        if entry['fork']:
-            if fork_parent:
-                entry['fork']['parent'] = fork_parent
-            if fork_root:
-                entry['fork']['root'] = fork_root
-        else:
-            fork_dict = {}
-            fork_dict['parent'] = fork_parent
-            fork_dict['root']   = fork_root
-            entry['fork'] = fork_dict
-        self.update_field(entry, 'fork', entry['fork'])
-
-
-    def update_entry_from_github3(self, entry, repo):
-        # Update existing entry.
-        #
-        # Since github3 accesses the live github API, whatever data we get,
-        # we assume is authoritative and overrides almost everything we may
-        # already have for the entry.
-        #
-        # However, this purposefully does not change 'languages' and
-        # 'readme', because they are not in the github3 structure and if
-        # we're updating an existing entry in our database, we don't want to
-        # destroy those fields if we have them.
-
-        entry['owner']          = repo.owner.login
-        entry['name']           = repo.name
-        entry['description']    = repo.description
-        entry['default_branch'] = repo.default_branch
-        entry['homepage']       = repo.homepage
-        entry['is_visible']     = not repo.private
-        entry['is_deleted']     = False   # github3 found it => not deleted.
-
-        if repo.language and (not entry['languages'] or entry['languages'] == -1):
-            # We may add more languages than the single language returned by
-            # the github API, so we don't overwrite this field unless warranted.
-            entry['languages'] = [{'name': repo.language}]
-
-        if repo.fork:
-            fork_dict = {}
-            fork_dict['parent'] = repo.parent.full_name if repo.parent else ''
-            fork_dict['root']   = repo.source.full_name if repo.source else ''
-            entry['fork'] = fork_dict
-        else:
-            entry['fork'] = False
-
-        entry['time']['repo_created']   = canonicalize_timestamp(repo.created_at)
-        entry['time']['repo_updated']   = canonicalize_timestamp(repo.updated_at)
-        entry['time']['repo_pushed']    = canonicalize_timestamp(repo.pushed_at)
-        entry['time']['data_refreshed'] = now_timestamp()
-
-        self.update_entry(entry)
 
 
     def add_entry_from_github3(self, repo, overwrite=False):
@@ -1300,7 +314,7 @@ class GitHubIndexer():
             # destroy those fields if we have them.
             fork_of = repo.parent.full_name if repo.parent else ''
             fork_root = repo.source.full_name if repo.source else ''
-            language = make_lang_value([repo.language]) if repo.language else []
+            languages = make_languages([repo.language]) if repo.language else []
             entry = repo_entry(id=repo.id,
                                name=repo.name,
                                owner=repo.owner.login,
@@ -1317,13 +331,180 @@ class GitHubIndexer():
                                last_updated=canonicalize_timestamp(repo.updated_at),
                                last_pushed=canonicalize_timestamp(repo.pushed_at),
                                data_refreshed=now_timestamp())
-            self.add_entry(entry)
+            self.db.insert_one(entry)
             return (True, entry)
         elif overwrite:
-            self.update_entry_from_github3(entry, repo)
-            return (False, entry)
+            return (False, self.update_entry_from_github3(entry, repo))
         else:
             return (False, entry)
+
+
+    def update_entry_from_github3(self, entry, repo, force=False):
+        # Update or delete entry, based on repo object from github3 API.
+        if not repo:
+            # The repo must have existed at some point because we have it in
+            # our database, but the API no longer returns it for this
+            # owner/name combination.
+            msg('*** {} no longer found -- marking as deleted'.format(
+                e_summary(entry)))
+            self.update_field(entry, 'is_deleted', True)
+            self.update_field(entry, 'is_visible', False)
+            return None
+        elif entry['_id'] != repo.id:
+            # Same owner & name, but different id.  It might have been
+            # deleted and recreated by the user.  We have to create a new
+            # entry for the updated _id.
+            msg('*** id changed for {} -- created new entry as #{}'.format(
+                e_summary(entry), repo.id))
+            (_, new_entry) = self.add_entry_from_github3(repo, True)
+            # Mark the old entry as deleted.
+            self.update_field(entry, 'is_deleted', True)
+            self.update_field(entry, 'is_visible', False)
+            msg('{} marked as deleted'.format(e_summary(entry)))
+            return new_entry
+
+        # Since github3 accesses the live github API, whatever data we get,
+        # we assume is authoritative and overrides almost everything we may
+        # already have for the entry.  However, we're careful not to
+        # overwrite data like 'languages' and 'readme' because we may have
+        # more info than what is supplied by the repo entry via the API.
+        updates = {}
+        if entry['is_deleted'] != False:
+            # We found it via github3 => not deleted.
+            msg('{} is_deleted changed to False'.format(e_summary(entry)))
+            updates['is_deleted'] = entry['is_deleted'] = False
+        if entry['owner'] != repo.owner.login:
+            msg('{} owner changed to {}'.format(e_summary(entry), repo.owner.login))
+            updates['owner'] = entry['owner'] = repo.owner.login
+        if entry['name'] != repo.name:
+            msg('{} repo name changed to {}'.format(e_summary(entry), repo.name))
+            updates['name'] = entry['name'] = repo.name
+        if entry['description'] != repo.description.strip():
+            msg('{} description changed'.format(e_summary(entry)))
+            updates['description'] = entry['description'] = repo.description.strip()
+        if entry['default_branch'] != repo.default_branch:
+            msg('{} default_branch changed to {}'.format(e_summary(entry), repo.default_branch))
+            updates['default_branch'] = entry['default_branch'] = repo.default_branch
+        if entry['homepage'] != repo.homepage:
+            msg('{} homepage changed to {}'.format(e_summary(entry), repo.homepage))
+            updates['homepage'] = entry['homepage'] = repo.homepage
+        if entry['is_visible'] != bool(not repo.private):
+            msg('{} visibility changed to {}'.format(e_summary(entry), not repo.private))
+            updates['is_visible'] = entry['is_visible'] = bool(not repo.private)
+
+        if repo.language and (not entry['languages'] or entry['languages'] == -1):
+            # We may add more languages than the single language returned by
+            # the API, so we don't overwrite this field unless we have nothing.
+            msg('added language for {}'.format(e_summary(entry)))
+            updates['languages'] = entry['languages'] = [{'name': repo.language}]
+
+        if repo.fork:
+            fork = make_fork(repo.parent.full_name if repo.parent else '',
+                             repo.source.full_name if repo.source else '')
+            if fork != entry['fork']:
+                msg('updated fork info for {}'.format(e_summary(entry)))
+                updates['fork'] = entry['fork'] = fork
+        elif entry['fork']:
+            # We have something for fork, but are not supposed to.
+            updates['fork'] = entry['fork'] = False
+
+        updates['time'] = {}
+        if 'repo_created' not in entry['time']:
+            entry['time']['repo_created'] = None
+        if entry['time']['repo_created'] != canonicalize_timestamp(repo.created_at):
+            updates['time']['repo_created'] = canonicalize_timestamp(repo.created_at)
+        if 'repo_updated' not in entry['time']:
+            entry['time']['repo_updated'] = None
+        if entry['time']['repo_updated'] != canonicalize_timestamp(repo.updated_at):
+            updates['time']['repo_updated'] = canonicalize_timestamp(repo.updated_at)
+        if 'repo_pushed' not in entry['time']:
+            entry['time']['repo_pushed'] = None
+        if entry['time']['repo_pushed'] != canonicalize_timestamp(repo.pushed_at):
+            updates['time']['repo_pushed'] = canonicalize_timestamp(repo.pushed_at)
+        if updates['time']:
+            updates['time']['data_refreshed'] = now_timestamp()
+            entry['time'] = updates['time']
+            msg('updated time info for {}'.format(e_summary(entry)))
+        else:
+            del updates['time']
+
+        if updates:
+            self.db.update({'_id': entry['_id']}, {'$set': updates}, upsert=False)
+        else:
+            msg('{} has no changes'.format(e_summary(entry)))
+        return entry
+
+
+    def update_entry_from_html(self, entry, page, force=False):
+        if page.status_code() in [404, 451]:
+            # 404 = not found. 451 = unavailable for legal reasons.
+            msg('*** {} no longer visible'.format(e_summary(entry)))
+            self.update_field(entry, 'is_visible', False)
+            return None
+        updates = {}
+        if page.owner() != entry['owner']:
+            msg('{} owner changed to {}'.format(e_summary(entry), page.owner()))
+            updates['owner'] = entry['owner'] = page.owner()
+        if page.name() != entry['name']:
+            msg('{} repo name changed to {}'.format(e_summary(entry), page.name()))
+            updates['name'] = entry['name'] = page.name()
+        if page.description() != entry['description']:
+            msg('added description for {}'.format(e_summary(entry)))
+            updates['description'] = entry['description'] = page.description()
+        if page.default_branch() != entry['default_branch']:
+            msg('{} default_branch set to {}'.format(e_summary(entry), page.default_branch()))
+            updates['default_branch'] = entry['default_branch'] = page.default_branch()
+        if page.files() != entry['files']:
+            msg('added {} files for {}'.format(len(page.files()), e_summary(entry)))
+            updates['files'] = entry['files'] = page.files()
+        if page.languages() != e_languages(entry):
+            msg('added {} languages for {}'.format(len(page.languages()), e_summary(entry)))
+            updates['languages'] = entry['languages'] = make_languages(page.languages())
+        if updates:
+            updates['time.data_refreshed'] = now_timestamp()
+            entry['time']['data_refreshed'] = updates['time.data_refreshed']
+            self.db.update({'_id': entry['_id']},
+                           {'$set': updates},
+                           upsert=False)
+        if page.forked_from() and not entry['fork']:
+            msg('updated fork info for {}'.format(e_summary(entry)))
+            update_fork_field(entry, page.forked_from(), None)
+        elif not updates:
+            msg('{} has no changes'.format(e_summary(entry)))
+        return entry
+
+
+    def update_field(self, entry, field, value, append=False):
+        # If 'append' == True, the field is assumed to be a set of values, and
+        # the 'value' is added if it's not already there.
+        now = now_timestamp()
+        if append:
+            if value in entry[field]:
+                return
+            else:
+                entry[field].append(value)
+                self.db.update({'_id': entry['_id']},
+                               {'$addToSet': {field: value},
+                                '$set':      {'time.data_refreshed': now}})
+        else:
+            entry[field] = value
+            self.db.update({'_id': entry['_id']},
+                           {'$set': {field: value,
+                                     'time.data_refreshed': now}})
+        # Update this so that the object being held by the caller reflects
+        # what was written to the database.
+        entry['time']['data_refreshed'] = now
+
+
+    def update_fork_field(self, entry, fork_parent, fork_root):
+        if entry['fork']:
+            if fork_parent:
+                entry['fork']['parent'] = fork_parent
+            if fork_root:
+                entry['fork']['root'] = fork_root
+        else:
+            entry['fork'] = make_fork(fork_parent, fork_root)
+        self.update_field(entry, 'fork', entry['fork'])
 
 
     def loop(self, iterator, body_function, selector, targets=None, start_id=0):
@@ -1460,7 +641,6 @@ class GitHubIndexer():
 
 
     def repo_list(self, targets=None, prefer_http=False, start_id=0):
-        # Returns a list of github3 repo objects.
         output = []
         count = 0
         total = 0
@@ -1469,29 +649,46 @@ class GitHubIndexer():
         for item in targets:
             count += 1
             if isinstance(item, int) or item.isdigit():
-                msg('*** Cannot retrieve new repos by id -- skipping {}'.format(item))
-                continue
+                # We can only deal with numbers if we already have the id's
+                # in our database.  Try it.
+                entry = self.db.find_one({'_id': item})
+                if entry:
+                    output.append(entry)
+                    total += 1
+                    continue
+                else:
+                    msg('*** Cannot find id {} -- skipping'.format(item))
+                    continue
             elif item.find('/') > 1:
                 owner = item[:item.find('/')]
                 name  = item[item.find('/') + 1:]
-                if prefer_http:
-                    # Github seems to redirect URLs to the new pages of
-                    # projects that have been renamed, so this works even if
-                    # we have an old owner/name combination.
-                    url = self.github_url_exists(None, owner, name)
-                    if url:
-                        (owner, name) = self.owner_name_from_github_url(url)
-                        repo = self.repo_via_api(owner, name)
-                    else:
-                        msg('*** No home page for {}/{} -- skipping'.format(owner, name))
-                        continue
-                else:
-                    # Don't prefer http => we go straight to API.
-                    repo = self.repo_via_api(owner, name)
+                # Do we already know about this in our database?  If so, just
+                # return it.
+                entry = self.db.find_one({'owner': owner, 'name': name})
+                if entry:
+                    output.append(entry)
+                    total += 1
+                    continue
             else:
                 msg('*** Skipping uninterpretable "{}"'.format(item))
                 continue
 
+            # We don't know about it, so we have to get info from the API.
+            (success, repo) = self.repo_via_api(owner, name)
+            if not success:
+                # We hit a problem. Skip this one.
+                continue
+            if not repo:
+                # The API says it doesn't exist.  Could our name be an older
+                # one?  Try one last-ditch effort.  Github seems to redirect
+                # URLs to the new pages of projects that have been renamed,
+                # so this works even if we have an old owner/name combination.
+                url = self.github_url_exists(None, owner, name)
+                if url:
+                    (owner, name) = self.owner_name_from_github_url(url)
+                    (success, repo) = self.repo_via_api(owner, name)
+                if not success:
+                    continue
             if repo:
                 output.append(repo)
                 total += 1
@@ -1503,10 +700,6 @@ class GitHubIndexer():
                 start = time()
         msg('Constructing target list... Done.  {} entries'.format(total))
         return output
-
-
-    def repo_list_prefer_http(self, targets=None, start_id=0):
-        return self.repo_list(targets, True)
 
 
     def language_query(self, languages):
@@ -1600,7 +793,7 @@ class GitHubIndexer():
     def print_stats(self, **kwargs):
         '''Print an overall summary of the database.'''
         msg('Printing general statistics.')
-        last_seen_id = self.get_last_seen_id()
+        last_seen_id = self.last_seen_id()
         if last_seen_id:
             msg('Last seen GitHub id: {}.'.format(last_seen_id))
         else:
@@ -1656,7 +849,14 @@ class GitHubIndexer():
             else:
                 msg('DESCRIPTION:')
             if entry['languages'] and entry['languages'] != -1:
-                msg('LANGUAGES:'.ljust(width), ', '.join(e_languages(entry)))
+                lang_list = pprint.pformat(e_languages(entry), indent=width+1,
+                                           width=70, compact=True)
+                # Get rid of leading and trailing cruft
+                if len(lang_list) > 70:
+                    lang_list = lang_list[width+1:-1]
+                else:
+                    lang_list = lang_list[1:-1]
+                msg('LANGUAGES:'.ljust(width), lang_list)
             else:
                 msg('LANGUAGES:')
             if entry['fork'] and entry['fork']['parent']:
@@ -1667,11 +867,15 @@ class GitHubIndexer():
                 fork_status = 'No'
             msg('FORK:'.ljust(width), fork_status)
             msg('CONTENT TYPE:'.ljust(width), entry['content_type'])
+            msg('DEFAULT BRANCH:'.ljust(width), entry['default_branch'])
             if entry['files'] and entry['files'] != -1:
-                files_list = pprint.pformat(entry['files'], indent=width,
+                files_list = pprint.pformat(entry['files'], indent=width+1,
                                             width=(70), compact=True)
                 # Get rid of leading and trailing cruft
-                files_list = files_list[width+1:-1]
+                if len(files_list) > 70:
+                    files_list = files_list[width+1:-1]
+                else:
+                    files_list = files_list[1:-1]
                 msg('FILES:'.ljust(width), files_list)
             elif entry['files'] == -1:
                 msg('FILES:'.ljust(width), '(empty repo)')
@@ -1683,7 +887,6 @@ class GitHubIndexer():
             msg('UPDATED:'.ljust(width), timestamp_str(entry['time']['repo_updated']))
             msg('PUSHED:'.ljust(width), timestamp_str(entry['time']['repo_pushed']))
             msg('DATA REFRESHED:'.ljust(width), timestamp_str(entry['time']['data_refreshed']))
-            msg('DEFAULT BRANCH:'.ljust(width), entry['default_branch'])
             if entry['readme'] and entry['readme'] != -1:
                 msg('README:')
                 msg(entry['readme'])
@@ -1712,193 +915,18 @@ class GitHubIndexer():
         msg('-'*79)
 
 
-    def extract_languages_from_html(self, html):
-        if not html:
-            return False
-        marker = 'class="lang">'
-        marker_len = len(marker)
-        languages = []
-        startpoint = html.find(marker)
-        while startpoint > 0:
-            endpoint = html.find('<', startpoint)
-            languages.append(html[startpoint + marker_len : endpoint])
-            startpoint = html.find(marker, endpoint)
-        # Minor cleanup.
-        if 'Other' in languages:
-            languages.remove('Other')
-        return languages
-
-
-    def extract_files_from_html(self, html, entry):
-        # Returns a tuple:
-        #   (is_empty, files, owner, name, default_branch)
-        empty_marker = '<h3>This repository is empty.</h3>'
-        owner = entry['owner']
-        name = entry['name']
-        if not html:
-            return (False, [], owner, name, None)
-        elif html.find(empty_marker) > 0:
-            return (True, [], owner, name, None)
-        else:
-            startmarker = '"file-wrap"'
-            startpoint = html.find(startmarker)
-            if startpoint < 0:
-                return (False, None, owner, name, None)
-
-            # If the repo has been renamed, we may have gotten here using an
-            # name.  First try to get the current name.
-            #
-            # Note: there seem to be 2 forms of the HTML for the file list:
-            # 1.  <div class="file-wrap">
-            #       <a href="/owner/name/tree/sha..."
-            #
-            # 2.  <include-fragment class="file-wrap" src="/owner/name/file-list/master">
-
-            if html[startpoint - 11 : startpoint] == '<div class=':
-                url_start = html.find('<a href="/', startpoint)
-                url_end   = html.find('"', url_start + 10)
-                url       = html[url_start + 10 : url_end]
-                owner     = url[: url.find('/')]
-                slash     = len(owner) + 1
-                name      = url[slash : url.find('/', slash)]
-            elif html[startpoint - 24 : startpoint] == '<include-fragment class=':
-                line_end  = html.find('>', startpoint)
-                url_start = html.find('src="/', startpoint, line_end)
-                url       = html[url_start + 6 : line_end]
-                owner     = url[: url.find('/')]
-                slash     = len(owner) + 1
-                name      = url[slash : url.find('/', slash)]
-
-            nextstart = html.find('<table', startpoint + len(startmarker))
-            base      = '/' + owner + '/' + name
-            filepat   = base + '/blob/'
-            dirpat    = base + '/tree/'
-            found_file   = html.find(filepat, nextstart)
-            found_dir    = html.find(dirpat, nextstart)
-            if found_file < 0 and found_dir < 0:
-                return (True, None, owner, name, None)
-            nextstart = min([v for v in [found_file, found_dir] if v > -1])
-            if nextstart >= 0:
-                branch_start = nextstart + len(base) + 6
-                branch_end = html.find('/', branch_start)
-                branch = html[branch_start : branch_end]
-            else:
-                return (False, None, owner, name, None)
-            section   = html[nextstart : html.find('</table', nextstart)]
-            # Update patterns now that we know the branch
-            filepat       = filepat + branch + '/'
-            filepat_len   = len(filepat)
-            dirpat        = dirpat + branch + '/'
-            dirpat_len    = len(dirpat)
-            # Now look inside the section were files are found.
-            found_file   = section.find(filepat)
-            found_dir    = section.find(dirpat)
-            nextstart = min([v for v in [found_file, found_dir] if v > -1])
-            files = []
-            while nextstart >= 0:
-                endpoint = section.find('"', nextstart)
-                whole = section[nextstart : endpoint]
-                if whole.find(filepat) > -1:
-                    files.append(whole[filepat_len :])
-                elif whole.find(dirpat) > -1:
-                    path = whole[dirpat_len :]
-                    if path.find('/') > 0:
-                        # It's a submodule.  Some of the other methods we use
-                        # don't distinguish submodules from directories in the
-                        # file lists, so we have to follow suit here for
-                        # consistency: treat it like a directory.
-                        endname = path[path.rfind('/') + 1:]
-                        files.append(endname + '/')
-                    else:
-                        files.append(path + '/')
-                else:
-                    # Something is inconsistent. Bail for now.
-                    return (False, None, owner, name, branch)
-                section = section[endpoint :]
-                found_file   = section.find(filepat)
-                found_dir    = section.find(dirpat)
-                if found_file < 0 and found_dir < 0:
-                    break
-                else:
-                    nextstart = min([v for v in [found_file, found_dir] if v > -1])
-            return (False, files, owner, name, branch)
-
-
-    def extract_fork_from_html(self, html):
-        if not html:
-            return False
-        spanstart = html.find('<span class="fork-flag">')
-        if spanstart > 0:
-            marker = '<span class="text">forked from <a href="'
-            marker_len = len(marker)
-            startpoint= html.find(marker, spanstart)
-            if startpoint > 0:
-                endpoint = html.find('"', startpoint + marker_len)
-                return html[startpoint + marker_len + 1 : endpoint]
-            else:
-                # Found the section marker, but couldn't parse the text for
-                # some reason.  Just return a Boolean value.
-                return True
-        else:
-            return False
-
-
-    def extract_description_from_html(self, html):
-        if not html:
-            return False
-        marker = 'itemprop="about">'
-        marker_len = len(marker)
-        description = None
-        startpoint = html.find(marker)
-        if startpoint > 0:
-            endpoint = html.find('</span>', startpoint)
-            description = html[startpoint + marker_len : endpoint]
-        if description:
-            return description.strip()
-        else:
-            return None
-
-
-    def extract_empty_from_html(self, html):
-        if not html:
-            return False
-        else:
-            # This is not fool-proof.  Someone could actually have this text
-            # literally inside a README file.  The probability is low, but....
-            text = '<h3>This repository is empty.</h3>'
-            return html.find(text) > 0
-
-
     def get_languages(self, entry):
-        # First try to get it by scraping the HTTP web page for the project.
-        # This saves an API call.
-        languages = []
-        fork_info = None
-        description = None
-        (code, html) = self.get_home_page(entry)
-        if code in [404, 451]:
-            # 404 = doesn't exist.  451 = unavailable for legal reasons.
-            # Don't bother try to get it via API either.
-            return (False, 'http', [], None, None)
-        if html:
-            languages   = self.extract_languages_from_html(html)
-            fork_info   = self.extract_fork_from_html(html)
-            description = self.extract_description_from_html(html)
-            if languages:
-                return (True, 'http', languages, fork_info, description)
-
-        # Failed to get it by scraping.  Try the GitHub API.
         # Using github3.py would cause 2 API calls per repo to get this info.
         # Here we do direct access to bring it to 1 api call.
         url = 'https://api.github.com/repos/{}/{}/languages'.format(entry['owner'],
                                                                     entry['name'])
         response = self.direct_api_call(url)
         if isinstance(response, int) and response >= 400:
-            return (False, 'api', [], fork_info, description)
+            return -1
         elif response == None:
-            return (True, 'api', [], fork_info, description)
+            return -1
         else:
-            return (True, 'api', json.loads(response), fork_info, description)
+            return json.loads(response)
 
 
     def get_readme(self, entry, prefer_http=False, api_only=False):
@@ -2005,20 +1033,11 @@ class GitHubIndexer():
 
         if not api_only:
             if not html:
-                count = 3
-                while count > 0:
-                    (code, html) = self.get_home_page(entry)
-                    if code in [404, 451]:
-                        # 404 = doesn't exist.  451 = unavailable for legal
-                        # reasons.  Don't bother try to get it via API either.
-                        return ('http', False, True)
-                    if code == 202:
-                        # 202 = accepted. Try again after a pause.
-                        sleep(0.5)
-                        count -= 1
-                        continue
-                    break
-
+                (code, html) = self.github_home_page(entry)
+                if code in [404, 451]:
+                    # 404 = doesn't exist.  451 = unavailable for legal
+                    # reasons.  Don't bother try to get it via API either.
+                    return ('http', False, True)
             # Do *not* turn this next condition into "else html".
             if html:
                 return ('http', True, self.extract_empty_from_html(html))
@@ -2043,7 +1062,7 @@ class GitHubIndexer():
 
     def get_fork_info(self, entry):
         # As usual, try to get it by scraping the web page.
-        (code, html) = self.get_home_page(entry)
+        (code, html) = self.github_home_page(entry)
         if html:
             fork_info = self.extract_fork_from_html(html)
             if fork_info != None:
@@ -2058,58 +1077,112 @@ class GitHubIndexer():
         return None
 
 
-    def add_languages(self, targets=None, start_id=0, **kwargs):
+    def set_files_via_api(self, entry, force=False):
+        branch   = 'master' if not entry['default_branch'] else entry['default_branch']
+        base     = 'https://api.github.com/repos/' + e_path(entry)
+        url      = base + '/git/trees/' + branch
+        response = self.direct_api_call(url)
+        if response == None:
+            msg('*** No response for {} -- skipping'.format(e_summary(entry)))
+        elif isinstance(response, int) and response in [403, 451]:
+            # We hit the rate limit or a problem.  Bubble it up to loop().
+            raise DirectAPIException('Getting files', response)
+        elif isinstance(response, int) and response >= 400:
+            # We got a code over 400, but not for things like API limits.
+            # The repo might have been renamed, deleted, made private, or
+            # it might have no files.  Try one more time using http.
+            self.set_files_via_http(entry)
+        else:
+            results = json.loads(response)
+            if 'message' in results and results['message'] == 'Not Found':
+                msg('*** {} not found -- skipping'.format(e_summary(entry)))
+                return
+            elif 'tree' in results:
+                files = []
+                for thing in results['tree']:
+                    if thing['type'] == 'blob':
+                        files.append(thing['path'])
+                    elif thing['type'] == 'tree':
+                        files.append(thing['path'] + '/')
+                    elif thing['type'] == 'commit':
+                        # These are submodules.  Treat as subdirectories for our purposes.
+                        files.append(thing['path'] + '/')
+                    else:
+                        import ipdb; ipdb.set_trace()
+                if not files:
+                    files = -1
+                self.update_field(entry, 'files', files)
+                msg('added {} files for {}'.format(len(files), e_summary(entry)))
+            else:
+                # If we ever get here, something has changed in the GitHub
+                # API or our assumptions, and we have to stop and fix it.
+                import ipdb; ipdb.set_trace()
+
+
+    def set_files_via_http(self, entry, force=False):
+        page = GitHubHomePage()
+        status = page.get_html(entry['owner'], entry['name'])
+        if status >= 400 and status not in [404, 451]:
+            raise UnexpectedResponseException('Getting HTML', status)
+        else:
+            self.update_entry_from_html(entry, page, force)
+
+
+    def set_files_via_svn(self, entry, force=False):
+        # SVN is not bound by same API rate limits, but is much slower.
+        if not entry['default_branch'] or entry['default_branch'] == 'master':
+            branch = '/trunk'
+        else:
+            branch = '/branches/' + entry['default_branch']
+        path = 'https://github.com/' + e_path(entry) + branch
+        try:
+            (code, output, err) = shell_cmd(['svn', 'ls', path])
+        except Exception as ex:
+            raise UnexpectedResponseException(ex)
+        if code == 0:
+            if output:
+                files = output.split('\n')
+                files = [f for f in files if f]  # Remove empty strings.
+                self.update_field(entry, 'files', files)
+                msg('added {} files for {}'.format(len(files), e_summary(entry)))
+            else:
+                msg('*** no result for {}'.format(e_summary(entry)))
+        elif code == 1 and err.find('non-existent') > 1:
+            msg('{} found empty'.format(e_summary(entry)))
+            self.update_field(entry, 'files', -1)
+        else:
+            msg('*** Error for {}: {}'.format(e_summary(entry), err))
+            import ipdb; ipdb.set_trace()
+
+
+    def add_languages(self, targets=None, force=False, prefer_http=False,
+                      start_id=0, **kwargs):
         def body_function(entry):
             t1 = time()
-            (found, method, langs, fork, desc) = self.get_languages(entry)
-            if not found:
-                # Repo was renamed, deleted, made private, or there's
-                # no home page.  See if our records need to be updated.
-                repo = self.github().repository(entry['owner'], entry['name'])
-                if not repo:
-                    # Nope, it's gone.
-                    self.update_field(entry, 'is_deleted', True)
-                    self.update_field(entry, 'is_visible', False)
-                    msg('*** {} no longer exists'.format(e_summary(entry)))
-                    found = True
-                elif entry['owner'] != repo.owner.login \
-                     or entry['name'] != repo.name:
-                    # The owner or name changed.
-                    self.update_field(entry, 'owner', repo.owner.login)
-                    self.update_field(entry, 'name', repo.name)
-                    # Try again with the info returned by github3.
-                    (found, method, langs, fork, desc) = self.get_languages(entry)
-                else:
-                    msg('*** {} appears to be private'.format(e_summary(entry)))
-                    self.update_field(entry, 'is_visible', False)
-                    return
-            if not found:
-                # 2nd attempt failed. Bail.
-                msg('*** Failed to get info about {}'.format(e_summary(entry)))
+            if entry['languages'] and entry['languages'] != -1 and not force:
+                msg('*** {} has languages -- skipping'.format(e_summary(entry)))
                 return
-            if not entry['is_deleted']:
-                t2 = time()
-                fork_info = ', a fork of {},'.format(fork) if fork else ''
-                lang_info = len(langs) if langs else 'no languages'
-                msg('{}{} in {:.2f}s via {}, {}'.format(
-                    e_summary(entry), fork_info, (t2 - t1), method, lang_info))
-                if langs:
-                    self.update_field(entry, 'languages', make_lang_value(langs))
-                else:
-                    self.update_field(entry, 'languages', -1)
-                if desc != None:
-                    self.update_field(entry, 'description', desc)
-                if fork:
-                    if isinstance(fork, str):
-                        self.update_fork_field(entry, fork, '')
-                    elif entry['fork']['parent'] != '':
-                        # The data we got back is only "True" and not a repo
-                        # path.  If we have more data about the fork in our
-                        # db (meaning it's not ''), we're better off keeping it.
-                        pass
-                    else:
-                        self.update_fork_field(entry, '', '')
-                self.update_field(entry, 'is_visible', True)
+            if prefer_http:
+                # The HTML scraper will get the languages as a by-product.
+                page = GitHubHomePage()
+                status = page.get_html(entry['owner'], entry['name'])
+                if status >= 400 and status not in [404, 451]:
+                    raise UnexpectedResponseException('Getting HTML', status)
+                langs = page.languages()
+            else:
+                # Use the API.  This is the best approach and gives a fuller
+                # language list, but of course, costs API calls.
+                # This will have a form like: {'Shell': 4051, 'Java': 1444052}
+                # We turn it it into a straight list of names.
+                lang_dict = self.get_languages(entry)
+                langs = [k for k in lang_dict.keys()] if lang_dict else None
+                langs = make_languages(langs)
+            if langs:
+                # We don't set languages to -1 if only using HTTP, as the web
+                # pages don't always have a language list.  If we used the API,
+                # our get_languages() will return -1 if appropriate.
+                self.update_field(entry, 'languages', langs)
+                msg('{} languages added to {}'.format(len(langs), e_summary(entry)))
 
         msg('Gathering language data for repositories.')
         # Set up default selection criteria WHEN NOT USING 'targets'.
@@ -2133,7 +1206,7 @@ class GitHubIndexer():
             if isinstance(readme, int) and readme in [403, 451]:
                 # We hit a problem.  Bubble it up to loop().
                 raise DirectAPIException('Getting README', readme)
-            if isinstance(readme, int) and readme >= 400:
+            elif isinstance(readme, int) and readme >= 400:
                 # We got a code over 400, probably 404, but don't know why.
                 # Repo might have been renamed, deleted, made private, or it
                 # has no README file.  If we're only using the API, it means
@@ -2141,27 +1214,20 @@ class GitHubIndexer():
                 # method (via the API), so we if we think the repo exists, we
                 # call it quits now.  Otherwise, we have more ambiguity and
                 # we try one more time to find the README file.
-                if api_only or prefer_http:
+                if api_only:
                     msg('No readme for {}'.format(e_summary(entry)))
                     self.update_field(entry, 'readme', -1)
                     return
-                repo = self.github().repository(entry['owner'], entry['name'])
-                if not repo:
-                    # Nope, it's gone.
-                    self.update_field(entry, 'is_deleted', True)
-                    self.update_field(entry, 'is_visible', False)
-                    msg('*** {} no longer exists'.format(e_summary(entry)))
-                    return
-                elif entry['owner'] != repo.owner.login \
-                     or entry['name'] != repo.name:
-                    # The owner or name changed.
-                    self.update_field(entry, 'owner', repo.owner.login)
-                    self.update_field(entry, 'name', repo.name)
+                (success, repo) = self.repo_via_api(entry['owner'], entry['name'])
+                if not success:
+                    # Hit a problem.
+                    msg('*** Skipping existing entry {}'.format(e_summary(thing)))
+                updated = self.update_entry_from_github3(entry, repo, force)
+                if updated['owner'] != entry['owner'] \
+                   or updated['name'] != entry['name'] \
+                   or updated['_id'] != entry['_id']:
                     # Try again with the info returned by github3.
-                    (method, readme) = self.get_readme(entry, prefer_http, api_only)
-                else:
-                    # No readme available.  Drop to the -1 case below.
-                    pass
+                    (method, readme) = self.get_readme(updated, prefer_http, api_only)
 
             if readme != None and not isinstance(readme, int):
                 t2 = time()
@@ -2199,224 +1265,95 @@ class GitHubIndexer():
         self.loop(self.entry_list, body_function, selected_repos, targets, start_id)
 
 
-    def create_index(self, targets=None, prefer_http=False, overwrite=False, **kwargs):
+    def create_entries(self, targets=None, api_only=False, prefer_http=False,
+                       force=False, start_id=None, **kwargs):
         '''Create index by looking for new entries in GitHub, or adding entries
         whose id's or owner/name paths are given in the parameter 'targets'.
         If something is already in our database, this won't change it unless
-        the flag 'overwrite' is True.
+        the flag 'force' is True.
         '''
         def body_function(thing):
             if isinstance(thing, github3.repos.repo.Repository):
-                (is_new, entry) = self.add_entry_from_github3(thing, overwrite)
+                (is_new, entry) = self.add_entry_from_github3(thing, force)
                 if is_new:
                     msg('{} added'.format(e_summary(entry)))
-                elif overwrite:
-                    msg('{} updated'.format(e_summary(entry)))
-                else:
-                    msg('*** Skipping existing entry {}'.format(e_summary(entry)))
-            elif overwrite:
-                # The targets are not github3 objects but rather our database
-                # entry dictionaries, which means they're in our database,
-                # which means we're doing updates of existing entries.
-                entry = thing
-                repo = self.github().repository(entry['owner'], entry['name'])
-                if repo:
-                    self.update_entry_from_github3(entry, repo)
-                    msg('{} updated'.format(e_summary(entry)))
-                else:
-                    msg('*** {} no longer exists'.format(e_summary(entry)))
-                    self.update_field(entry, 'is_visible', False)
-            else:
-                # We have an entry already, but we're not doing an update.
-                msg('*** Skipping existing entry {}'.format(e_summary(thing)))
+                return
 
-        msg('Indexing GitHub repositories.')
-        if overwrite:
-            msg('Overwriting existing data.')
-        if targets:
+            # The targets are not github3 objects but rather our database
+            # entry dictionaries, which means they're in our database,
+            # which means we only do something if we're forcing an update.
+            if not force:
+                msg('*** Skipping existing entry {}'.format(e_summary(thing)))
+                return
+            # We're forcing an update of existing database entries.
+            entry = thing
+            if prefer_http:
+                page = GitHubHomePage()
+                status = page.get_html(entry['owner'], entry['name'])
+                if status in [404, 451]:
+                    # Is no longer visible.
+                    self.update_field(entry, 'is_visible', False)
+                    msg('*** {} no longer visible in GitHub'.format(e_summary(entry)))
+                elif status >= 400:
+                    raise UnexpectedResponseException('Getting HTML', status)
+                else:
+                    self.update_entry_from_html(entry, page, force)
+            else:
+                # Use the API.
+                (success, repo) = self.repo_via_api(entry['owner'], entry['name'])
+                if not success:
+                    # Hit a problem.
+                    msg('*** Skipping existing entry {}'.format(e_summary(thing)))
+                self.update_entry_from_github3(entry, repo)
+
+        if targets or start_id:
             # We have a list of id's or repo paths.
-            if overwrite:
-                # Using the overwrite flag only makes sense if we expect that
+            if force:
+                # Using the force flag only makes sense if we expect that
                 # the entries are in the database already => use entry_list()
                 repo_iterator = self.entry_list
             else:
-                # We're indexing but not overwriting. We assume that what
-                # we're given as targets are completely new repo id's or paths.
-                if prefer_http:
-                    repo_iterator = self.repo_list_prefer_http
-                else:
-                    repo_iterator = self.repo_list
+                # We're indexing but not overwriting. This won't do anything
+                # to existing entries, so we assume that the targets are new
+                # repo id's or paths (or a mix of known and unknown).
+                repo_iterator = self.repo_list
+            last_seen = None
         else:
-            last_seen = self.get_last_seen_id()
-            total = humanize.intcomma(self.db.count())
-            msg('Database has {} total GitHub entries.'.format(total))
+            last_seen = self.last_seen_id()
             if last_seen:
                 msg('Continuing from highest-known id {}'.format(last_seen))
             else:
                 msg('No record of the last-seen repo.  Starting from the top.')
                 last_seen = -1
-            repo_iterator = self.get_github_iterator
+            repo_iterator = self.github_iterator
 
         # Set up selection criteria and start the loop
-        self.loop(repo_iterator, body_function, None, targets or last_seen)
+        selected_repos = {}
+        if start_id > 0:
+            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            selected_repos['_id'] = {'$gte': start_id}
+        self.loop(repo_iterator, body_function, selected_repos, targets or last_seen, start_id)
 
 
-    def recreate_index(self, targets=None, prefer_http=False, **kwargs):
-        '''Reindex entries from GitHub, even if they are already in our db.'''
-        self.create_index(targets, prefer_http=prefer_http, overwrite=True)
-
-
-    def verify_index(self, targets=None, prefer_http=False, overwrite=False,
-                     start_id=None, force=False, **kwargs):
-        '''Verify entries against GitHub.  Does not modify anything unless the
-        flag 'overwrite' is true.
-        '''
-        def check(entry, entry_field, repo, repo_field):
-            if hasattr(repo, repo_field):
-                if entry[entry_field] != getattr(repo, repo_field):
-                    newvalue = getattr(repo, repo_field)
-                    msg('*** {} {} changed from {} to {}'.format(
-                        e_summary(entry), entry_field, entry[entry_field], newvalue))
-                    self.update_field(entry, entry_field, newvalue)
-            else:
-                import ipdb; ipdb.set_trace()
-
-        def body_function(thing):
-            if isinstance(thing, github3.repos.repo.Repository):
-                repo = thing
-                (added, entry) = self.add_entry_from_github3(repo)
-                if added:
-                    msg('Added {}'.format(e_summary(entry)))
-            else:
-                entry = thing
-                owner = entry['owner']
-                name = entry['name']
-                repo = self.repo_via_api(owner, name)
-            if not repo:
-                # The repo must have existed at some point because we have it
-                # in our database, but the API no longer returns it for this
-                # owner/name combination.
-                msg('*** {} no longer found in GitHub -- marking as deleted'.format(
-                    e_summary(entry)))
-                self.update_field(entry, 'is_deleted', True)
-                self.update_field(entry, 'is_visible', False)
-                return
-            if entry['_id'] == repo.id:
-                self.update_entry_from_github3(entry, repo)
-                msg('{} verified'.format(e_summary(entry)))
-            else:
-                # Have to delete and recreate the entry to update _id.
-                msg('*** id changed for {} -- created new entry as #{}'.format(
-                    e_summary(entry), repo.id))
-                # It existed under this id at one time. Mark it deleted.
-                self.update_field(entry, 'is_deleted', True)
-                self.update_field(entry, 'is_visible', False)
-                # Create whole new entry for the new id.
-                (is_new, entry) = self.add_entry_from_github3(repo, True)
-
-            if not entry or (not entry['is_visible'] and not force):
-                return
-            if entry['content_type'] == []:
-                (code, html) = self.get_home_page(entry)
-                if code in [404, 451]:
-                    return
-                (method, tested, empty) = self.check_empty(entry, prefer_http=True, html=html)
-                if not tested:
-                    return
-                elif empty:
-                    msg('{} found empty via {}'.format(e_summary(entry), method))
-                    self.update_field(entry, 'files', -1)
-                else:
-                    (_, files, owner, name, branch) = self.extract_files_from_html(html, entry)
-                    if owner != entry['owner']:
-                        import ipdb; ipdb.set_trace()
-                    if name != entry['name']:
-                        import ipdb; ipdb.set_trace()
-                    if branch and branch != entry['default_branch']:
-                        msg('{} default_branch changed to {}'.format(e_summary(entry), branch))
-                        self.update_field(entry, 'default_branch', branch)
-                    if files:
-                        self.update_field(entry, 'files', files)
-                        msg('added {} files for {}'.format(len(files), e_summary(entry)))
-                    else:
-                        # Something went wrong. Maybe the repository has been
-                        # renamed and getting the http page now fails, etc.
-                        msg('*** problem getting files for nonempty repo {}'.format(
-                            e_summary(entry)))
-                if entry['content_type'] != -1:
-                    # If we got files, try to get the readme.
-                    try:
-                        (method, readme) = self.get_readme(entry, prefer_http, False)
-                        if readme and not isinstance(readme, int):
-                            self.update_field(entry, 'readme', readme)
-                    except:
-                        msg('*** failed to get readme for {}'.format(e_summary(entry)))
-
-        if overwrite:
-            msg('Verifying and reconciling database entries against GitHub.')
-        else:
-            msg('Verifying database entries with GitHub.')
-        if targets:
-            # We have an explicit list of id's or repo paths.
-            repo_iterator = self.entry_list
-        else:
-            # We don't have a list => we're running through all of them.
-            repo_iterator = self.get_github_iterator
-            total = humanize.intcomma(self.db.count())
-            msg('Database has {} total GitHub entries.'.format(total))
-
-        # Set up selection criteria and start the loop
-        self.loop(repo_iterator, body_function, None, targets, start_id)
-
-
-    def infer_type(self, targets=None, prefer_http=False, overwrite=False,
+    def infer_type(self, targets=None, api_only=False, prefer_http=False,
                    force=False, start_id=None, **kwargs):
-
-        def any_code_files(files):
-            # If even one file has a code file extension, there's code.
-            for f in files:
-                if has_code_extension(f) or is_code_file(f):
-                    return True
-            return False
-
-        def only_text_files(files):
-            # If only find clearly text-only files, there's probably no code.
-            # Return false if there's anything we don't recognize.
-            for f in files:
-                if is_noncode_file(f):
-                    continue
-                if not has_noncode_extension(f):
-                    return False
-            return True
 
         def guess_type(entry):
             # File tests are very basic and conservative.  They are
             # necessarily heuristic, so they could be wrong if someone does
             # something really unusual.
             if entry['files'] != -1:
-                if any_code_files(entry['files']):
+                if any(is_code_file(f) for f in entry['files']):
                     return ('code', 'file names')
-                if only_text_files(entry['files']):
+                if all(is_noncode_file(f) for f in entry['files']):
                     return ('noncode', 'file names')
+
             # The language-based heuristics are more iffy because GitHub's
             # language analyzer sometimes guesses wrong.
             if entry['languages'] != -1:
-                for lang in entry['languages']:
-                    if known_code_lang(lang['name']):
-                        return ('code', 'languages')
+                if any(known_code_lang(lang['name']) for lang in entry['languages']):
+                    return ('code', 'languages')
             return (None, None)
-
-        def update_content_type(entry):
-            (guessed, method) = guess_type(entry)
-            if guessed:
-                msg('{} guessed to contain {}'.format(e_summary(entry), guessed))
-                self.push_field(entry, 'content_type', make_content_value(guessed, method))
-            else:
-                msg('Unable to guess type of {}'.format(e_summary(entry)))
-
-        def update_files(entry, files):
-            self.update_field(entry, 'files', files)
-            msg('added {} files for {}'.format(len(files), e_summary(entry)))
 
         def body_function(entry):
             summary = e_summary(entry)
@@ -2426,38 +1363,19 @@ class GitHubIndexer():
             if entry['content_type'] and not force:
                 msg('*** {} already has content_type -- skipping'.format(summary))
                 return
-
-            # If we already have a list of files, we can infer things.
-            if entry['files']:
-                update_content_type(entry)
-                return
-            # We don't have a files list yet. Get it.
-            (code, html) = self.get_home_page(entry)
-            if code in [404, 451]:
-                return
-            (method, tested, empty) = self.check_empty(entry, prefer_http=True, html=html)
-            if not tested:
-                msg('*** problem getting home page for {}'.format(e_summary(entry)))
-                return
-            elif empty:
-                msg('{} found empty via {}'.format(e_summary(entry), method))
-                self.update_field(entry, 'files', -1)
-                return
-            (_, files, owner, name, branch) = self.extract_files_from_html(html, entry)
-            if owner != entry['owner']:
-                msg('{} owner changed to {}'.format(e_summary(entry), owner))
-                self.update_field(entry, 'owner', owner)
-            if name != entry['name']:
-                msg('{} repo name changed to {}'.format(e_summary(entry), name))
-                self.update_field(entry, 'name', name)
-            if branch and branch != entry['default_branch']:
-                msg('{} default_branch changed to {}'.format(e_summary(entry), branch))
-                self.update_field(entry, 'default_branch', branch)
-            if files:
-                update_files(entry, files)
-                update_content_type(entry)
+            if not entry['files']:
+                # We don't have a files list yet. Get it.
+                if api_only:      self.set_files_via_api(entry, force)
+                elif prefer_http: self.set_files_via_http(entry, force)
+                else:             self.set_files_via_svn(entry, force)
+            (guessed, method) = guess_type(entry)
+            if guessed:
+                msg('{} guessed to contain {}'.format(e_summary(entry), guessed))
+                self.update_field(entry, 'content_type',
+                                  make_content_type(guessed, method),
+                                  append=True)
             else:
-                msg('*** problem getting files for {}'.format(e_summary(entry)))
+                msg('Unable to guess type of {}'.format(e_summary(entry)))
 
         # Main loop.
         selected_repos = {'is_deleted': False, 'is_visible': True}
@@ -2467,111 +1385,8 @@ class GitHubIndexer():
         self.loop(self.entry_list, body_function, selected_repos, targets, start_id)
 
 
-    def update_files(self, targets=None, api_only=False, prefer_http=False,
-                     overwrite=False, force=False, start_id=None, **kwargs):
-
-        def get_files_via_api(entry):
-            # Using the API is faster, but you're limited to 5000 calls/hr.
-            branch   = 'master' if not entry['default_branch'] else entry['default_branch']
-            base     = 'https://api.github.com/repos/' + e_path(entry)
-            url      = base + '/git/trees/' + branch
-            response = self.direct_api_call(url)
-            if response == None:
-                msg('*** No response for {} -- skipping'.format(e_summary(entry)))
-            elif isinstance(response, int) and response in [403, 451]:
-                # We hit the rate limit or a problem.  Bubble it up to loop().
-                raise DirectAPIException('Getting files', response)
-            elif isinstance(response, int) and response >= 400:
-                # We got a code over 400, but not for things like API limits.
-                # The repo might have been renamed, deleted, made private, or
-                # it might have no files.  FIXME: use api to get branch name.
-                get_files_via_http(entry)
-            else:
-                results = json.loads(response)
-                if 'message' in results and results['message'] == 'Not Found':
-                    msg('*** {} not found -- skipping'.format(e_summary(entry)))
-                    return
-                elif 'tree' in results:
-                    files = files_from_api(results['tree'])
-                    self.update_field(entry, 'files', files)
-                    msg('added {} files for {}'.format(len(files), e_summary(entry)))
-                else:
-                    import ipdb; ipdb.set_trace()
-
-        def get_files_via_http(entry):
-            (code, html) = self.get_home_page(entry)
-            if code in [404, 451]:
-                # 404 = not found. 451 = unavailable for legal reasons.
-                self.update_field(entry, 'is_visible', False)
-                msg('*** {} no longer visible'.format(e_summary(entry)))
-            elif code >= 400:
-                # We got a code over 400, but we don't know why.
-                raise UnexpectedResponseException('Getting files', code)
-            elif html:
-                (empty, files, owner, name, branch) = self.extract_files_from_html(html, entry)
-                if owner != entry['owner']:
-                    msg('{} owner changed to {}'.format(e_summary(entry), owner))
-                    self.update_field(entry, 'owner', owner)
-                if name != entry['name']:
-                    msg('{} repo name changed to {}'.format(e_summary(entry), name))
-                    self.update_field(entry, 'name', name)
-                if branch and branch != entry['default_branch']:
-                    msg('{} default_branch changed to {}'.format(e_summary(entry), branch))
-                    self.update_field(entry, 'default_branch', branch)
-                if empty:
-                    msg('{} appears empty via http'.format(e_summary(entry)))
-                    self.update_field(entry, 'files', -1)
-                elif files:
-                    self.update_field(entry, 'files', files)
-                    msg('added {} files for {}'.format(len(files), e_summary(entry)))
-                else:
-                    # Something went wrong. Maybe the repository has been
-                    # renamed and getting the http page now fails, etc.
-                    msg('*** problem getting files for nonempty repo {}'.format(
-                        e_summary(entry)))
-            else:
-                import ipdb; ipdb.set_trace()
-
-        def get_files_via_svn(entry):
-            # SVN is not bound by same API rate limits, but is much slower.
-            if not entry['default_branch'] or entry['default_branch'] == 'master':
-                branch = '/trunk'
-            else:
-                branch = '/branches/' + entry['default_branch']
-            path = 'https://github.com/' + e_path(entry) + branch
-            try:
-                (code, output, err) = shell_cmd(['svn', 'ls', path])
-            except Exception as ex:
-                msg('*** Error for {}: {}'.format(e_summary(entry), ex))
-                return
-            if code == 0:
-                if output:
-                    files = output.split('\n')
-                    files = [f for f in files if f]  # Remove empty strings.
-                    self.update_field(entry, 'files', files)
-                    msg('added {} files for {}'.format(len(files), e_summary(entry)))
-                else:
-                    msg('*** no result for {}'.format(e_summary(entry)))
-            elif code == 1 and err.find('non-existent') > 1:
-                msg('{} found empty'.format(e_summary(entry)))
-                self.update_field(entry, 'files', -1)
-            else:
-                import ipdb; ipdb.set_trace()
-                msg('*** Error for {}: {}'.format(e_summary(entry), err))
-
-        def files_from_api(json_tree):
-            files = []
-            for thing in json_tree:
-                if thing['type'] == 'blob':
-                    files.append(thing['path'])
-                elif thing['type'] == 'tree':
-                    files.append(thing['path'] + '/')
-                elif thing['type'] == 'commit':
-                    # These are submodules.  Treat as subdirectories for our purposes.
-                    files.append(thing['path'] + '/')
-                else:
-                    import ipdb; ipdb.set_trace()
-            return files
+    def add_files(self, targets=None, api_only=False, prefer_http=False,
+                  force=False, start_id=None, **kwargs):
 
         def body_function(entry):
             if not force:
@@ -2585,13 +1400,14 @@ class GitHubIndexer():
                 if entry['is_visible'] == False or entry['is_deleted'] == True:
                     msg('*** {} believed to be unavailable -- skipping'.format(info))
                     return
-            if api_only:      get_files_via_api(entry)
-            elif prefer_http: get_files_via_http(entry)
-            else:             get_files_via_svn(entry)
+            if api_only:      self.set_files_via_api(entry, force)
+            elif prefer_http: self.set_files_via_http(entry, force)
+            else:             self.set_files_via_svn(entry, force)
 
         def iterator(targets, start_id):
             fields = ['files', 'default_branch', 'is_visible', 'is_deleted',
-                      'owner', 'name', 'time', '_id']
+                      'owner', 'name', 'time', '_id', 'description',
+                      'languages', 'fork']
             return self.entry_list(targets, fields, start_id)
 
         # And let's do it.
