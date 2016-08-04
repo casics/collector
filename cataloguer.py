@@ -78,12 +78,11 @@ from github_indexer import GitHubIndexer
 # should hopefully be possible.  See later in this file for the definition
 # of the arguments to main().
 
-def main(acct=None, api_only=False, index_create=False, index_recreate=False,
+def main(acct=None, api_only=False, create=False,
          file=None, force=False, get_files=False, prefer_http=False, id=None,
          lang=None, index_langs=False, print_details=False, print_stats=False,
          index_readmes=False, print_summary=False, print_ids=False,
-         index_verify=False, update=False, infer_type=False,
-         list_deleted=False, delete=False, *repos):
+         infer_type=False, list_deleted=False, delete=False, *repos):
     '''Generate or print index of projects found in repositories.'''
 
     def convert(arg):
@@ -109,16 +108,13 @@ def main(acct=None, api_only=False, index_create=False, index_recreate=False,
     elif print_summary:   call('print_summary',     login=acct, **args)
     elif print_ids:       call('print_indexed_ids', login=acct, **args)
     elif print_details:   call('print_details',     login=acct, **args)
-    elif index_create:    call('create_index',      login=acct, **args)
-    elif index_recreate:  call('recreate_index',    login=acct, **args)
+    elif create:          call('create_entries',    login=acct, **args)
     elif index_langs:     call('add_languages',     login=acct, **args)
     elif index_readmes:   call('add_readmes',       login=acct, **args)
-    elif index_verify :   call('verify_index',      login=acct, **args)
     elif delete:          call('mark_deleted',      login=acct, **args)
     elif list_deleted:    call('list_deleted',      login=acct, **args)
-    elif update:          call('update_entries',    login=acct, **args)
     elif infer_type:      call('infer_type',        login=acct, **args)
-    elif get_files:       call('update_files',      login=acct, **args)
+    elif get_files:       call('add_files',         login=acct, **args)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
@@ -194,11 +190,10 @@ def github_info(hosting_service, service_account):
 main.__annotations__ = dict(
     acct            = ('use specified GitHub account login',          'option', 'a'),
     api_only        = ('only use the API, without first trying HTTP', 'flag',   'A'),
-    index_create    = ('gather basic index data',                     'flag',   'c'),
-    index_recreate  = ('re-gather basic index data',                  'flag',   'C'),
-    file            = ('get repo names or identifiers from file',     'option', 'f'),
+    create          = ('create database entries by querying GitHub',  'flag',   'c'),
+    file            = ('use subset of repo names or id\'s from file', 'option', 'f'),
     force           = ('get info even if we know we already tried',   'flag',   'F'),
-    get_files       = ('get list of top-level files for repos',       'flag',   'g'),
+    get_files       = ('get list of files at repo top level',         'flag',   'g'),
     prefer_http     = ('prefer HTTP without using API, if possible',  'flag'  , 'H'),
     id              = ('start iterations with this GitHub id',        'option', 'I'),
     lang            = ('limit printing to specific languages',        'option', 'L'),
@@ -208,9 +203,7 @@ main.__annotations__ = dict(
     index_readmes   = ('gather README files',                         'flag',   'r'),
     print_summary   = ('print list of indexed repositories'   ,       'flag',   's'),
     print_ids       = ('print all known repository id numbers',       'flag',   'S'),
-    update          = ('update specific entries by querying GitHub',  'flag',   'u'),
     infer_type      = ('try to guess if repos contain noncode',       'flag',   't'),
-    index_verify    = ('verify, but do not change, basic index data', 'flag',   'v'),
     list_deleted    = ('list deleted entries',                        'flag',   'x'),
     delete          = ('mark specific entries as deleted',            'flag',   'X'),
     repos           = 'one or more repository identifiers or names',
