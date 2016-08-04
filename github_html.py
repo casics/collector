@@ -78,7 +78,7 @@ class GitHubHomePage():
                 # the self._foo attributes directly here; the functions do it.
                 self.owner(force=True)
                 self.name(force=True)
-                self.url()
+                self.url(force=True)
                 self.is_empty()
                 self.description()
                 self.languages()
