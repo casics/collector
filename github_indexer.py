@@ -1066,40 +1066,6 @@ class GitHubIndexer():
         return ('api', self.direct_api_call(url))
 
 
-    def check_empty(self, entry, prefer_http=False, api_only=False, html=None):
-        # Returns tuple (method, tested, empty), where 'tested' is True if we
-        # actually found the repo (as opposed to meeting an error of some
-        # kind) and 'empty' is True if empty, False if not.
-
-        if not api_only:
-            if not html:
-                (code, html) = self.github_home_page(entry)
-                if code in [404, 451]:
-                    # 404 = doesn't exist.  451 = unavailable for legal
-                    # reasons.  Don't bother try to get it via API either.
-                    return ('http', False, True)
-            # Do *not* turn this next condition into "else html".
-            if html:
-                return ('http', True, self.extract_empty_from_html(html))
-
-        # If we get here and we're only doing HTTP, then we're done.
-        if prefer_http:
-            return ('http', False, True)
-
-        # Resort to GitHub API call.
-        # This approach is from http://stackoverflow.com/a/33400770/743730
-        url = 'https://api.github.com/repos/{}/{}/stats/contributors'.format(
-            entry['owner'], entry['name'])
-        response = self.direct_api_call(url)
-        if isinstance(response, int) and response >= 400:
-            return ('api', False, True)
-        elif response == None:
-            return ('api', False, True)
-        else:
-            # In case of empty repos, you get status 204: no content.
-            return ('api', True, response != 204)
-
-
     def get_fork_info(self, entry):
         # As usual, try to get it by scraping the web page.
         (code, html) = self.github_home_page(entry)
