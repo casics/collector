@@ -1066,23 +1066,6 @@ class GitHubIndexer():
         return ('api', self.direct_api_call(url))
 
 
-    def get_fork_info(self, entry):
-        # As usual, try to get it by scraping the web page.
-        (code, html) = self.github_home_page(entry)
-        if html:
-            fork_info = self.extract_fork_from_html(html)
-            if fork_info != None:
-                return ('http', fork_info)
-
-        # Failed to scrape it from the web page.  Resort to using the API.
-        url = 'https://api.github.com/repos/{}/{}/forks'.format(entry['owner'], entry['name'])
-        response = self.direct_api_call(url)
-        if response:
-            values = json.loads(response)
-            return ('api', values['fork'])
-        return None
-
-
     def set_files_via_api(self, entry, force=False):
         branch   = 'master' if not entry['default_branch'] else entry['default_branch']
         base     = 'https://api.github.com/repos/' + e_path(entry)
