@@ -1173,6 +1173,8 @@ class GitHubIndexer():
                 status = page.get_html(entry['owner'], entry['name'])
                 if status >= 400 and status not in [404, 451]:
                     raise UnexpectedResponseException('Getting HTML', status)
+                elif page.is_problem():
+                    msg('*** problem with GitHub page for {}'.format(e_summary(entry)))
                 langs = page.languages()
             else:
                 # Use the API.  This is the best approach and gives a fuller
@@ -1307,6 +1309,8 @@ class GitHubIndexer():
                 if status in [404, 451]:
                     # Is no longer visible.
                     self.mark_entry_invisible(entry)
+                elif page.is_problem():
+                    msg('*** problem with GitHub page for {}'.format(e_summary(entry)))
                 elif status >= 400:
                     raise UnexpectedResponseException('Getting HTML', status)
                 else:
