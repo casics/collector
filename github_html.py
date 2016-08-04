@@ -41,6 +41,7 @@ class GitHubHomePage():
         self._forked_from    = None
         self._default_branch = None
         self._files          = None
+        self._is_problem     = None
         self._is_empty       = None
         self._status_code    = None
 
@@ -79,17 +80,18 @@ class GitHubHomePage():
                 self.owner(force=True)
                 self.name(force=True)
                 self.url(force=True)
-                self.is_empty()
-                self.description()
-                self.languages()
-                self.forked_from()
-                self.default_branch()
-                self.files()
+                if not self.is_problem():
+                    self.is_empty()
+                    self.description()
+                    self.languages()
+                    self.forked_from()
+                    self.default_branch()
+                    self.files()
                 break
             self._status_code = r.status_code
             return r.status_code
         except Exception as err:
-            raise NetworkAccessException('Getting GitHub home page', err)
+            raise NetworkAccessException('Getting GitHub page HTML', err)
 
 
     def status_code(self):
@@ -106,11 +108,21 @@ class GitHubHomePage():
         return self._url
 
 
+    def is_problem(self, force=False):
+        # This is not fool-proof.  Someone could actually have this text
+        # literally inside a README file.  The probability is low, but....
+        if (self._is_problem == None and self._html) or force:
+            text = '<h3>There is a problem with this repository on disk.</h3>'
+            self._is_problem = self._html.find(text) > 0
+        return self._is_problem
+
+
     def is_empty(self, force=False):
         # This is not fool-proof.  Someone could actually have this text
         # literally inside a README file.  The probability is low, but....
         if (self._is_empty == None and self._html) or force:
             text = '<h3>This repository is empty.</h3>'
+            problem = self._html.find(text) > 0
             self._is_empty = self._html.find(text) > 0
         return self._is_empty
 
@@ -160,7 +172,9 @@ class GitHubHomePage():
 
 
     def description(self, force=False):
-        if (self._description == None and self._html) or force:
+        if self.is_problem():
+            self._description = None
+        elif (self._description == None and self._html) or force:
             marker = 'itemprop="about">'
             start = self._html.find(marker)
             if start > 0:
@@ -172,7 +186,9 @@ class GitHubHomePage():
 
 
     def default_branch(self, force=False):
-        if (self._default_branch == None and self._html) or force:
+        if self.is_problem():
+            self._default_branch = None
+        elif (self._default_branch == None and self._html) or force:
             # It seems that even if a repo is empty, the "recent commits" link
             # exists.  It has the following form:
             #   <link href="https://github.com/OWNER/NAME/commits/BRANCH.atom" ...
@@ -185,7 +201,9 @@ class GitHubHomePage():
 
 
     def languages(self, force=False):
-        if (self._languages == None and self._html) or force:
+        if self.is_problem():
+            self._languages = None
+        elif (self._languages == None and self._html) or force:
             marker = 'class="lang">'
             marker_len = len(marker)
             self._languages = []
@@ -201,7 +219,9 @@ class GitHubHomePage():
 
 
     def forked_from(self, force=False):
-        if (self._forked_from == None and self._html) or force:
+        if self.is_problem():
+            self._forked_from = None
+        elif (self._forked_from == None and self._html) or force:
             spanstart = self._html.find('<span class="fork-flag">')
             if spanstart > 0:
                 marker = '<span class="text">forked from <a href="'
@@ -224,11 +244,14 @@ class GitHubHomePage():
         #   None if we don't have html
         #   -1 if the repo is empty
         #   otherwise, a list of files
-        if (self._files != None or not self._html) and not force:
+        if self.is_problem():
+            self._files = None
             return self._files
-        if self.is_empty():
-            self._html = -1
-            return self._html
+        elif self.is_empty():
+            self._files = -1
+            return self._files
+        elif (self._files != None or not self._html) and not force:
+            return self._files
 
         startmarker = '"file-wrap"'
         start = self._html.find(startmarker)

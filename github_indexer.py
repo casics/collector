@@ -1127,6 +1127,8 @@ class GitHubIndexer():
         status = page.get_html(entry['owner'], entry['name'])
         if status >= 400 and status not in [404, 451]:
             raise UnexpectedResponseException('Getting HTML', status)
+        elif page.is_problem():
+            msg('*** GitHub problem for {} -- skipping'.format(e_summary(entry)))
         else:
             self.update_entry_from_html(entry, page, force)
 
