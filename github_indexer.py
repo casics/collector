@@ -168,8 +168,7 @@ class GitHubIndexer():
             except github3.GitHubError as err:
                 if err.code == 403:
                     # This can happen for rate limits, and also when there is
-                    # a disk error or other problem on GitHub.  (Yes, it's
-                    # happened.)
+                    # a disk error or other problem on GitHub. (It's happened.)
                     if self.api_calls_left() < 1:
                         self.wait_for_reset()
                         failures += 1
@@ -271,7 +270,23 @@ class GitHubIndexer():
             return False
 
 
+    def github_current_owner_name(self, entry, owner=None, name=None):
+        '''Visit the repo on github.com using HTTP and return the current
+        owner and name as a tuple.  This may be the same as 'owner' and 'name'
+        or it may be different if the repo has moved.'''
+        if entry and not owner:
+            owner = entry['owner']
+        if entry and not name:
+            name = entry['name']
+        url = self.github_url_exists(None, owner, name)
+        if not url:
+            return (None, None)
+        else:
+            return self.owner_name_from_github_url(url)
+
+
     def owner_name_from_github_url(self, url):
+        '''Returns a tuple of (owner, name).'''
         if url.startswith('https'):
             # length of https://github.com/ = 18
             path = url[19:]
@@ -345,21 +360,17 @@ class GitHubIndexer():
             # The repo must have existed at some point because we have it in
             # our database, but the API no longer returns it for this
             # owner/name combination.
-            msg('*** {} no longer found -- marking as deleted'.format(
-                e_summary(entry)))
-            self.update_field(entry, 'is_deleted', True)
-            self.update_field(entry, 'is_visible', False)
+            msg('*** {} no longer found -- marking deleted'.format(e_summary(entry)))
+            self.mark_entry_deleted(entry)
             return None
         elif entry['_id'] != repo.id:
             # Same owner & name, but different id.  It might have been
-            # deleted and recreated by the user.  We have to create a new
-            # entry for the updated _id.
-            msg('*** id changed for {} -- created new entry as #{}'.format(
-                e_summary(entry), repo.id))
+            # deleted and recreated by the user (which would generate a new
+            # id in GitHub).  Create a new entry for the updated _id.
+            msg('*** {} id changed -- creating #{}'.format(e_summary(entry), repo.id))
             (_, new_entry) = self.add_entry_from_github3(repo, True)
             # Mark the old entry as deleted.
-            self.update_field(entry, 'is_deleted', True)
-            self.update_field(entry, 'is_visible', False)
+            self.mark_entry_deleted(entry)
             msg('{} marked as deleted'.format(e_summary(entry)))
             return new_entry
 
@@ -408,25 +419,32 @@ class GitHubIndexer():
             # We have something for fork, but are not supposed to.
             updates['fork'] = entry['fork'] = False
 
-        updates['time'] = {}
         if 'repo_created' not in entry['time']:
             entry['time']['repo_created'] = None
-        if entry['time']['repo_created'] != canonicalize_timestamp(repo.created_at):
-            updates['time']['repo_created'] = canonicalize_timestamp(repo.created_at)
+            updates['time.repo_created'] = None
+        elif entry['time']['repo_created'] != canonicalize_timestamp(repo.created_at):
+            entry['time']['repo_created']= canonicalize_timestamp(repo.created_at)
+            updates['time.repo_created'] = entry['time']['repo_created']
+
         if 'repo_updated' not in entry['time']:
             entry['time']['repo_updated'] = None
-        if entry['time']['repo_updated'] != canonicalize_timestamp(repo.updated_at):
-            updates['time']['repo_updated'] = canonicalize_timestamp(repo.updated_at)
+            updates['time.repo_updated'] = None
+        elif entry['time']['repo_updated'] != canonicalize_timestamp(repo.updated_at):
+            entry['time']['repo_updated'] = canonicalize_timestamp(repo.updated_at)
+            updates['time.repo_updated'] = entry['time']['repo_updated']
+
         if 'repo_pushed' not in entry['time']:
             entry['time']['repo_pushed'] = None
-        if entry['time']['repo_pushed'] != canonicalize_timestamp(repo.pushed_at):
-            updates['time']['repo_pushed'] = canonicalize_timestamp(repo.pushed_at)
-        if updates['time']:
-            updates['time']['data_refreshed'] = now_timestamp()
-            entry['time'] = updates['time']
+            updates['time.repo_pushed'] = None
+        elif entry['time']['repo_pushed'] != canonicalize_timestamp(repo.pushed_at):
+            entry['time']['repo_pushed'] = canonicalize_timestamp(repo.pushed_at)
+            updates['time.repo_pushed'] = entry['time']['repo_pushed']
+
+        if 'time.repo_created' in updates or 'time.repo_updated' in updates \
+           or 'time.repo_pushed' in updates:
+            entry['time']['data_refreshed'] = now_timestamp()
+            updates['time.data_refreshed'] = entry['time']['data_refreshed']
             msg('updated time info for {}'.format(e_summary(entry)))
-        else:
-            del updates['time']
 
         if updates:
             self.db.update({'_id': entry['_id']}, {'$set': updates}, upsert=False)
@@ -438,8 +456,7 @@ class GitHubIndexer():
     def update_entry_from_html(self, entry, page, force=False):
         if page.status_code() in [404, 451]:
             # 404 = not found. 451 = unavailable for legal reasons.
-            msg('*** {} no longer visible'.format(e_summary(entry)))
-            self.update_field(entry, 'is_visible', False)
+            self.mark_entry_invisible(entry)
             return None
         updates = {}
         if page.owner() != entry['owner']:
@@ -455,7 +472,8 @@ class GitHubIndexer():
             msg('{} default_branch set to {}'.format(e_summary(entry), page.default_branch()))
             updates['default_branch'] = entry['default_branch'] = page.default_branch()
         if page.files() != entry['files']:
-            msg('added {} files for {}'.format(len(page.files()), e_summary(entry)))
+            num = len(page.files()) if (page.files() and page.files() != -1) else 0
+            msg('added {} files for {}'.format(num, e_summary(entry)))
             updates['files'] = entry['files'] = page.files()
         if page.languages() != e_languages(entry):
             msg('added {} languages for {}'.format(len(page.languages()), e_summary(entry)))
@@ -468,13 +486,13 @@ class GitHubIndexer():
                            upsert=False)
         if page.forked_from() and not entry['fork']:
             msg('updated fork info for {}'.format(e_summary(entry)))
-            update_fork_field(entry, page.forked_from(), None)
+            update_entry_fork_field(entry, page.forked_from(), None)
         elif not updates:
             msg('{} has no changes'.format(e_summary(entry)))
         return entry
 
 
-    def update_field(self, entry, field, value, append=False):
+    def update_entry_field(self, entry, field, value, append=False):
         # If 'append' == True, the field is assumed to be a set of values, and
         # the 'value' is added if it's not already there.
         now = now_timestamp()
@@ -496,7 +514,7 @@ class GitHubIndexer():
         entry['time']['data_refreshed'] = now
 
 
-    def update_fork_field(self, entry, fork_parent, fork_root):
+    def update_entry_fork_field(self, entry, fork_parent, fork_root):
         if entry['fork']:
             if fork_parent:
                 entry['fork']['parent'] = fork_parent
@@ -504,7 +522,29 @@ class GitHubIndexer():
                 entry['fork']['root'] = fork_root
         else:
             entry['fork'] = make_fork(fork_parent, fork_root)
-        self.update_field(entry, 'fork', entry['fork'])
+        self.update_entry_field(entry, 'fork', entry['fork'])
+
+
+    def update_entry_moved(self, entry, owner, name):
+        (success, repo) = self.repo_via_api(owner, name)
+        if not success:
+            msg('*** unable to access {}/{} -- skipping'.format(name, name))
+            return None
+        elif repo.owner.login != entry['owner'] or repo.name != entry['name']:
+            return self.update_entry_from_github3(entry, repo)
+        else:
+            return entry
+
+
+    def mark_entry_deleted(self, entry):
+        msg('{} marked as deleted'.format(e_summary(entry)))
+        self.update_entry_field(entry, 'is_deleted', True)
+        self.update_entry_field(entry, 'is_visible', False)
+
+
+    def mark_entry_invisible(self, entry):
+        msg('{} marked as not visible'.format(e_summary(entry)))
+        self.update_entry_field(entry, 'is_visible', False)
 
 
     def loop(self, iterator, body_function, selector, targets=None, start_id=0):
@@ -527,26 +567,26 @@ class GitHubIndexer():
                 except (github3.GitHubError, DirectAPIException) as err:
                     if err.code == 403:
                         if self.api_calls_left() < 1:
-                            msg('GitHub API rate limit exceeded')
+                            msg('*** GitHub API rate limit exceeded')
                             self.wait_for_reset()
                             retry = True
                         else:
                             # Occasionally get 403 even when not over the limit.
-                            msg('GitHub code 403 for {}'.format(e_summary(entry)))
-                            self.update_field(entry, 'is_visible', False)
+                            msg('*** GitHub code 403 for {}'.format(e_summary(entry)))
+                            self.mark_entry_invisible(entry)
                             retry = False
                             failures += 1
                     elif err.code == 451:
-                        msg('GitHub code 451 (blocked) for {}'.format(e_summary(entry)))
-                        self.update_field(entry, 'is_visible', False)
+                        msg('*** GitHub code 451 (blocked) for {}'.format(e_summary(entry)))
+                        self.mark_entry_invisible(entry)
                         retry = False
                     else:
-                        msg('GitHub API exception: {0}'.format(err))
+                        msg('*** GitHub API exception: {0}'.format(err))
                         failures += 1
                         # Might be a network or other transient error.
                         retry = True
                 except Exception as err:
-                    msg('Exception for {} -- skipping it -- {}'.format(
+                    msg('*** Exception for {} -- skipping it -- {}'.format(
                         e_summary(entry), err))
                     # Something unexpected.  Don't retry this entry, but count
                     # this failure in case we're up against a roadblock.
@@ -1111,7 +1151,7 @@ class GitHubIndexer():
                         import ipdb; ipdb.set_trace()
                 if not files:
                     files = -1
-                self.update_field(entry, 'files', files)
+                self.update_entry_field(entry, 'files', files)
                 msg('added {} files for {}'.format(len(files), e_summary(entry)))
             else:
                 # If we ever get here, something has changed in the GitHub
@@ -1143,13 +1183,13 @@ class GitHubIndexer():
             if output:
                 files = output.split('\n')
                 files = [f for f in files if f]  # Remove empty strings.
-                self.update_field(entry, 'files', files)
+                self.update_entry_field(entry, 'files', files)
                 msg('added {} files for {}'.format(len(files), e_summary(entry)))
             else:
                 msg('*** no result for {}'.format(e_summary(entry)))
         elif code == 1 and err.find('non-existent') > 1:
             msg('{} found empty'.format(e_summary(entry)))
-            self.update_field(entry, 'files', -1)
+            self.update_entry_field(entry, 'files', -1)
         else:
             msg('*** Error for {}: {}'.format(e_summary(entry), err))
             import ipdb; ipdb.set_trace()
@@ -1181,7 +1221,7 @@ class GitHubIndexer():
                 # We don't set languages to -1 if only using HTTP, as the web
                 # pages don't always have a language list.  If we used the API,
                 # our get_languages() will return -1 if appropriate.
-                self.update_field(entry, 'languages', langs)
+                self.update_entry_field(entry, 'languages', langs)
                 msg('{} languages added to {}'.format(len(langs), e_summary(entry)))
 
         msg('Gathering language data for repositories.')
@@ -1197,6 +1237,11 @@ class GitHubIndexer():
 
     def add_readmes(self, targets=None, languages=None, prefer_http=False,
                     api_only=False, start_id=0, force=False, **kwargs):
+
+        def no_readme(entry):
+            msg('{} has no readme'.format(e_summary(entry)))
+            self.update_entry_field(entry, 'readme', -1)
+
         def body_function(entry):
             if entry['is_visible'] == False:
                 # See note at the end of the parent function (add_readmes).
@@ -1207,36 +1252,40 @@ class GitHubIndexer():
                 # We hit a problem.  Bubble it up to loop().
                 raise DirectAPIException('Getting README', readme)
             elif isinstance(readme, int) and readme >= 400:
-                # We got a code over 400, probably 404, but don't know why.
+                # Got a code over 400, probably 404, but don't know why.
                 # Repo might have been renamed, deleted, made private, or it
-                # has no README file.  If we're only using the API, it means
-                # we already tried to get the README using the most certain
-                # method (via the API), so we if we think the repo exists, we
-                # call it quits now.  Otherwise, we have more ambiguity and
-                # we try one more time to find the README file.
+                # has no README file.  If we used the API, the API will have
+                # account for repo moves already, so we're done.  If not
+                # using the API, we have to check if the repo moved.
                 if api_only:
-                    msg('No readme for {}'.format(e_summary(entry)))
-                    self.update_field(entry, 'readme', -1)
+                    no_readme(entry)
                     return
-                (success, repo) = self.repo_via_api(entry['owner'], entry['name'])
-                if not success:
-                    # Hit a problem.
-                    msg('*** Skipping existing entry {}'.format(e_summary(thing)))
-                updated = self.update_entry_from_github3(entry, repo, force)
-                if updated['owner'] != entry['owner'] \
-                   or updated['name'] != entry['name'] \
-                   or updated['_id'] != entry['_id']:
-                    # Try again with the info returned by github3.
-                    (method, readme) = self.get_readme(updated, prefer_http, api_only)
-
+                # Use http to check if the repo still exists but has moved.
+                (owner, name) = self.github_current_owner_name(entry)
+                if not owner:
+                    msg('*** {} not found in GitHub anymore'.format(e_summary(entry)))
+                    self.mark_entry_invisible(entry)
+                    return
+                if owner != entry['owner'] or name != entry['name']:
+                    if prefer_http:
+                        msg('*** {} moved to {}/{} -- skipping b/c not using API'.format(
+                            e_summary(entry), owner, name))
+                        return
+                    updated = self.update_entry_moved(entry, owner, name)
+                    if updated:
+                        (method, readme) = self.get_readme(updated, prefer_http, api_only)
             if readme != None and not isinstance(readme, int):
                 t2 = time()
                 msg('{} {} in {:.2f}s via {}'.format(
                     e_summary(entry), len(readme), (t2 - t1), method))
-                self.update_field(entry, 'readme', readme)
+                self.update_entry_field(entry, 'readme', readme)
+            elif isinstance(readme, int) and readme in [404, 451]:
+                # If we have gotten this far and still have a 404, it's not there.
+                no_readme(entry)
+            elif readme == None or readme == -1:
+                no_readme(entry)
             else:
                 msg('Got {} for readme for {}'.format(readme, e_summary(entry)))
-            self.update_field(entry, 'is_visible', True)
 
         # Set up default selection criteria WHEN NOT USING 'targets'.
         #
@@ -1292,8 +1341,7 @@ class GitHubIndexer():
                 status = page.get_html(entry['owner'], entry['name'])
                 if status in [404, 451]:
                     # Is no longer visible.
-                    self.update_field(entry, 'is_visible', False)
-                    msg('*** {} no longer visible in GitHub'.format(e_summary(entry)))
+                    self.mark_entry_invisible(entry)
                 elif status >= 400:
                     raise UnexpectedResponseException('Getting HTML', status)
                 else:
@@ -1327,6 +1375,7 @@ class GitHubIndexer():
                 last_seen = -1
             repo_iterator = self.github_iterator
 
+        msg('Indexing entries.')
         # Set up selection criteria and start the loop
         selected_repos = {}
         if start_id > 0:
@@ -1356,13 +1405,14 @@ class GitHubIndexer():
             return (None, None)
 
         def body_function(entry):
-            summary = e_summary(entry)
-            if entry['files'] == -1 and not force:
-                msg('*** {} empty -- skipping'.format(summary))
-                return
-            if entry['content_type'] and not force:
-                msg('*** {} already has content_type -- skipping'.format(summary))
-                return
+            if not force:
+                summary = e_summary(entry)
+                if entry['files'] == -1:
+                    msg('*** {} empty -- skipping'.format(summary))
+                    return
+                if entry['content_type']:
+                    msg('*** {} already has content_type -- skipping'.format(summary))
+                    return
             if not entry['files']:
                 # We don't have a files list yet. Get it.
                 if api_only:      self.set_files_via_api(entry, force)
@@ -1371,13 +1421,14 @@ class GitHubIndexer():
             (guessed, method) = guess_type(entry)
             if guessed:
                 msg('{} guessed to contain {}'.format(e_summary(entry), guessed))
-                self.update_field(entry, 'content_type',
-                                  make_content_type(guessed, method),
-                                  append=True)
+                self.update_entry_field(entry, 'content_type',
+                                        make_content_type(guessed, method),
+                                        append=True)
             else:
                 msg('Unable to guess type of {}'.format(e_summary(entry)))
 
         # Main loop.
+        msg('Inferring content_type for repositories.')
         selected_repos = {'is_deleted': False, 'is_visible': True}
         if start_id > 0:
             msg('Skipping GitHub id\'s less than {}'.format(start_id))
@@ -1411,6 +1462,7 @@ class GitHubIndexer():
             return self.entry_list(targets, fields, start_id)
 
         # And let's do it.
+        msg('Gathering lists of files.')
         if force:
             selected_repos = {'is_deleted': False, 'is_visible': True}
         else:
