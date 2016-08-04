@@ -66,7 +66,7 @@ def msg_bad(thing):
     elif isinstance(thing, str):
         msg('*** {} not an id or an "owner/name" string ***'.format(thing))
     else:
-        msg('*** unrecognize type of thing: "{}" ***'.format(thing))
+        msg('*** Unrecognize type of thing: "{}" ***'.format(thing))
 
 
 # Error classes for internal communication.
@@ -113,7 +113,7 @@ class GitHubIndexer():
             raise SystemExit(text)
 
         if not self._github:
-            msg('Unexpected failure in logging into GitHub')
+            msg('*** Unexpected failure in logging into GitHub')
             raise SystemExit()
 
 
@@ -127,14 +127,14 @@ class GitHubIndexer():
         try:
             return calls_left()
         except Exception as err:
-            msg('Got exception asking about rate limit: {}'.format(err))
-            msg('Sleeping for 1 minute and trying again.')
+            msg('*** Got exception asking about rate limit: {}'.format(err))
+            msg('*** Sleeping for 1 minute and trying again.')
             sleep(60)
             msg('Trying again.')
             try:
                 return calls_left()
             except Exception as err:
-                msg('Got another exception asking about rate limit: {}'.format(err))
+                msg('*** Got another exception asking about rate limit: {}'.format(err))
                 # Treat it as no time left.  Caller should pause for longer.
                 return 0
 
@@ -145,7 +145,7 @@ class GitHubIndexer():
             rate_limit = self.github().rate_limit()
             return rate_limit['resources']['core']['reset']
         except Exception as err:
-            msg('Got exception asking about reset time: {}'.format(err))
+            msg('*** Got exception asking about reset time: {}'.format(err))
             raise err
 
 
@@ -174,20 +174,20 @@ class GitHubIndexer():
                         failures += 1
                         retry = True
                     else:
-                        msg('GitHb code 403 for {}/{}'.format(owner, name))
+                        msg('*** GitHb code 403 for {}/{}'.format(owner, name))
                         return (False, None)
                 elif err.code == 451:
                     # https://developer.github.com/changes/2016-03-17-the-451-status-code-is-now-supported/
-                    msg('GitHub code 451 (blocked) for {}/{}'.format(owner, name))
+                    msg('*** GitHub code 451 (blocked) for {}/{}'.format(owner, name))
                     break
                 else:
-                    msg('github3 generated an exception: {0}'.format(err))
+                    msg('*** github3 generated an exception: {0}'.format(err))
                     failures += 1
                     # Might be a network or other transient error. Try again.
                     sleep(0.5)
                     retry = True
             except Exception as err:
-                msg('Exception for {}/{}: {}'.format(owner, name, err))
+                msg('*** Exception for {}/{}: {}'.format(owner, name, err))
                 # Something even more unexpected.
                 return (False, None)
         return (True, None)
@@ -208,7 +208,7 @@ class GitHubIndexer():
                 sleep(1)
                 conn = http.client.HTTPSConnection("api.github.com", timeout=15)
             except Exception:
-                msg('Failed direct api call: {}'.format(err))
+                msg('*** Failed direct api call: {}'.format(err))
                 return None
         conn.request("GET", url, {}, headers)
         response = conn.getresponse()
@@ -225,13 +225,13 @@ class GitHubIndexer():
             except:
                 # Content is either binary or garbled.  We can't deal with it,
                 # so we return an empty string.
-                msg('Undecodable content received for {}'.format(url))
+                msg('*** Undecodable content received for {}'.format(url))
                 return ''
         elif response.status == 301:
             # Redirection.  Start from the top with new URL.
             return self.direct_api_call(response.getheader('Location'))
         else:
-            msg('Response status {} for {}'.format(response.status, url))
+            msg('*** Response status {} for {}'.format(response.status, url))
             return response.status
 
 
@@ -258,7 +258,7 @@ class GitHubIndexer():
                 sleep(1)
                 conn = http.client.HTTPSConnection('github.com', timeout=15)
             except Exception:
-                msg('Failed url check for {}: {}'.format(url_path, err))
+                msg('*** Failed url check for {}: {}'.format(url_path, err))
                 return None
         conn.request('HEAD', url_path)
         resp = conn.getresponse()
@@ -309,7 +309,7 @@ class GitHubIndexer():
             else:
                 return self.github().iter_all_repos()
         except Exception as err:
-            msg('github.iter_all_repos() failed with {0}'.format(err))
+            msg('*** github.iter_all_repos() failed with {0}'.format(err))
             sys.exit(1)
 
 
@@ -546,7 +546,7 @@ class GitHubIndexer():
     def update_entry_moved(self, entry, owner, name):
         (success, repo) = self.repo_via_api(owner, name)
         if not success:
-            msg('*** unable to access {}/{} -- skipping'.format(name, name))
+            msg('*** Unable to access {}/{} -- skipping'.format(name, name))
             return None
         elif repo.owner.login != entry['owner'] or repo.name != entry['name']:
             return self.update_entry_from_github3(entry, repo)
@@ -612,7 +612,7 @@ class GitHubIndexer():
                     retry = False
 
             if failures >= self._max_failures:
-                msg('Stopping because of too many consecutive failures')
+                msg('*** Stopping because of too many consecutive failures')
                 break
             count += 1
             if count % 100 == 0:
@@ -855,7 +855,7 @@ class GitHubIndexer():
         if last_seen_id:
             msg('Last seen GitHub id: {}.'.format(last_seen_id))
         else:
-            msg('*** no entries ***')
+            msg('*** No entries ***')
             return
         total = humanize.intcomma(self.db.count())
         msg('{} total database entries.'.format(total))
@@ -1031,12 +1031,12 @@ class GitHubIndexer():
                 if status == 503:
                     # Weird behavior -- not sure if it's our system or theirs,
                     # but we sometimes get 503 and if you try it again, it works.
-                    msg('code 503 -- retrying {}'.format(url))
+                    msg('*** Code 503 -- retrying {}'.format(url))
                     (status, content) = get_raw(url)
                 if content != None:
                     return ('http', content)
                 else:
-                    msg('*** code {} getting readme for {}'.format(r.status_code, url))
+                    msg('*** Code {} getting readme for {}'.format(r.status_code, url))
                     return ('http', None)
             elif entry['files'] and entry['files'] != -1:
                 # We have a list of files in the repo, and there's no README.
@@ -1153,7 +1153,7 @@ class GitHubIndexer():
                 self.update_entry_field(entry, 'files', files)
                 msg('added {} files for {}'.format(len(files), e_summary(entry)))
             else:
-                msg('*** no result for {}'.format(e_summary(entry)))
+                msg('*** No result for {}'.format(e_summary(entry)))
         elif code == 1 and err.find('non-existent') > 1:
             msg('{} found empty'.format(e_summary(entry)))
             self.update_entry_field(entry, 'files', -1)
@@ -1301,7 +1301,7 @@ class GitHubIndexer():
             # entry dictionaries, which means they're in our database,
             # which means we only do something if we're forcing an update.
             if not force:
-                msg('*** Skipping existing entry {}'.format(e_summary(thing)))
+                msg('Skipping existing entry {}'.format(e_summary(thing)))
                 return
             # We're forcing an update of existing database entries.
             entry = thing
@@ -1312,7 +1312,7 @@ class GitHubIndexer():
                     # Is no longer visible.
                     self.mark_entry_invisible(entry)
                 elif page.is_problem():
-                    msg('*** problem with GitHub page for {}'.format(e_summary(entry)))
+                    msg('*** Problem with GitHub page for {}'.format(e_summary(entry)))
                 elif status >= 400:
                     raise UnexpectedResponseException('Getting HTML', status)
                 else:
@@ -1396,7 +1396,7 @@ class GitHubIndexer():
                                         make_content_type(guessed, method),
                                         append=True)
             else:
-                msg('Unable to guess type of {}'.format(e_summary(entry)))
+                msg('*** Unable to guess type of {}'.format(e_summary(entry)))
 
         # Main loop.
         msg('Inferring content_type for repositories.')
