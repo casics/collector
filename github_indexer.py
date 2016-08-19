@@ -327,8 +327,8 @@ class GitHubIndexer():
             # because they are not in the github3 structure and if we're
             # updating an existing entry in our database, we don't want to
             # destroy those fields if we have them.
-            fork_of = repo.parent.full_name if repo.parent else ''
-            fork_root = repo.source.full_name if repo.source else ''
+            fork_of = repo.parent.full_name if repo.parent else None
+            fork_root = repo.source.full_name if repo.source else None
             languages = make_languages([repo.language]) if repo.language else []
             entry = repo_entry(id=repo.id,
                                name=repo.name,
@@ -411,8 +411,8 @@ class GitHubIndexer():
             updates['languages'] = entry['languages'] = [{'name': repo.language}]
 
         if repo.fork:
-            fork = make_fork(repo.parent.full_name if repo.parent else '',
-                             repo.source.full_name if repo.source else '')
+            fork = make_fork(repo.parent.full_name if repo.parent else None,
+                             repo.source.full_name if repo.source else None)
             if fork != entry['fork']:
                 msg('updated fork info for {}'.format(summary))
                 updates['fork'] = entry['fork'] = fork
@@ -499,13 +499,25 @@ class GitHubIndexer():
             self.db.update({'_id': entry['_id']},
                            {'$set': updates},
                            upsert=False)
-
-        if (not entry['fork'] and page.forked_from()) \
-           or (not page.forked_from() and entry['fork'] \
-               and (entry['fork']['root'] or entry['fork']['parent'])):
+        # Fork field is too complicated, and handled separately.
+        if (not entry['fork'] and page.forked_from()):
+            # We don't have it as a fork, but it is.
+            # Don't know the root when we're getting the data from this source.
+            # So, we can only update the parent.
             msg('updated fork info for {}'.format(summary))
-            self.update_entry_fork_field(entry, page.forked_from(), None)
+            parent = page.forked_from() if page.forked_from() != True else None
+            self.update_entry_fork_field(entry, True, parent, None)
+        elif entry['fork'] and page.forked_from() == False:
+            # We had it as a fork, but apparently it's not.
+            msg('updated fork info for {}'.format(summary))
+            self.update_entry_fork_field(entry, False, None, None)
+        elif entry['fork'] and page.forked_from() != entry['fork']['parent']:
+            # We have it as a fork, it is a fork, and we have parent info.
+            msg('updated fork info for {}'.format(summary))
+            self.update_entry_fork_field(entry, True, page.forked_from(), None)
         elif not updates:
+            # This last case is weird but the logic is that if we get here, we
+            # have no updates to fork or anything else.
             msg('{} has no changes'.format(summary))
         return entry
 
@@ -532,13 +544,21 @@ class GitHubIndexer():
         entry['time']['data_refreshed'] = now
 
 
-    def update_entry_fork_field(self, entry, fork_parent, fork_root):
-        if entry['fork']:
+    def update_entry_fork_field(self, entry, is_fork, fork_parent, fork_root):
+        if entry['fork'] and not is_fork:
+            # We had it as a fork, but it's not.
+            entry['fork'] = False
+        elif entry['fork']:
+            # It's a fork, and we had it as such. Maybe update our fields,
+            # but don't overwrite something that we may already have had
+            # gathered if the new value is None -- we may have gotten the
+            # existing value a different, possibly more thorough way.
             if fork_parent:
                 entry['fork']['parent'] = fork_parent
             if fork_root:
                 entry['fork']['root'] = fork_root
-        else:
+        elif is_fork:
+            # We don't have it as a fork, but it is.
             entry['fork'] = make_fork(fork_parent, fork_root)
         self.update_entry_field(entry, 'fork', entry['fork'])
 
