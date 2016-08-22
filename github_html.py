@@ -14,6 +14,7 @@ import os
 import requests
 import sys
 import urllib
+from time import sleep
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../common"))
 sys.path.append(os.path.join(os.path.dirname(__file__), "../database"))
@@ -37,6 +38,7 @@ class GitHubHomePage():
         self._url              = None
         self._html             = None
         self._description      = None
+        self._homepage         = None
         self._languages        = None
         self._forked_from      = None
         self._default_branch   = None
@@ -47,9 +49,10 @@ class GitHubHomePage():
         self._num_commits      = None
         self._num_branches     = None
         self._num_releases     = None
+        self._num_contributors = None
 
 
-    def get_html(self, owner, name):
+    def get_html(self, owner, name, refresh=False):
         if not owner or not name:
             raise ValueError('Invalid arguments')
         self._owner = owner
@@ -70,10 +73,13 @@ class GitHubHomePage():
                     # Something's wrong. Stop trying, let caller deal with it.
                     break
 
-                # Success.  Set internal variables using the results we get,
-                # possibly overriding the values passed in.  (The info on
-                # GitHub is always assumed to be the most recent and correct.)
+                # Success.
                 self._html = r.text
+
+                # If we're forcing a refresh of the HTML, we're done now.
+                if refresh:
+                    break
+
                 # Initialize the remaining internal values based on what we
                 # got.  It's critical to run through all of them so that the
                 # values are set based on the content on the GitHub page,
@@ -86,6 +92,7 @@ class GitHubHomePage():
                 if not self.is_problem():
                     self.is_empty()
                     self.description()
+                    self.homepage()
                     self.languages()
                     self.forked_from()
                     self.default_branch()
@@ -93,6 +100,7 @@ class GitHubHomePage():
                     self.num_commits()
                     self.num_releases()
                     self.num_branches()
+                    self.num_contributors()
                 break
             self._status_code = r.status_code
             return r.status_code
@@ -182,13 +190,29 @@ class GitHubHomePage():
             self._description = None
         elif (self._description == None and self._html) or force:
             marker = 'itemprop="about">'
+            marker_len = 17
             start = self._html.find(marker)
             if start > 0:
                 endpoint = self._html.find('</span>', start)
-                self._description = self._html[start + len(marker) : endpoint].strip()
+                self._description = self._html[start + marker_len : endpoint].strip()
             else:
                 self._description = ''
         return self._description
+
+
+    def homepage(self, force=False):
+        if self.is_problem():
+            self._homepage = None
+        elif (self._homepage == None and self._html) or force:
+            marker = 'itemprop="url"><a href="'
+            marker_len = 24
+            start = self._html.find(marker)
+            if start > 0:
+                endpoint = self._html.find('"', start + marker_len)
+                self._homepage = self._html[start + marker_len : endpoint].strip()
+            else:
+                self._homepage = ''
+        return self._homepage
 
 
     def default_branch(self, force=False):
@@ -211,7 +235,7 @@ class GitHubHomePage():
             self._languages = None
         elif (self._languages == None and self._html) or force:
             marker = 'class="lang">'
-            marker_len = len(marker)
+            marker_len = 13
             self._languages = []
             start = self._html.find(marker)
             while start > 0:
@@ -231,7 +255,7 @@ class GitHubHomePage():
             spanstart = self._html.find('<span class="fork-flag">')
             if spanstart > 0:
                 marker = '<span class="text">forked from <a href="'
-                marker_len = len(marker)
+                marker_len = 40
                 start = self._html.find(marker, spanstart)
                 if start > 0:
                     endpoint = self._html.find('"', start + marker_len)
@@ -328,7 +352,7 @@ class GitHubHomePage():
                 self._num_commits = 0
                 return self._num_commits
             marker = '<span class="num text-emphasized">'
-            marker_len = len(marker)
+            marker_len = 34
             start = self._html.find(marker, spanstart)
             if start > 0:
                 endpoint = self._html.find('</span>', start + marker_len)
@@ -351,7 +375,7 @@ class GitHubHomePage():
                 self._num_branches = 0
                 return self._num_branches
             marker = '<span class="num text-emphasized">'
-            marker_len = len(marker)
+            marker_len = 34
             start = self._html.find(marker, spanstart)
             if start > 0:
                 endpoint = self._html.find('</span>', start + marker_len)
@@ -372,13 +396,44 @@ class GitHubHomePage():
                 self._num_releases = 0
                 return self._num_releases
             marker = '<span class="num text-emphasized">'
-            marker_len = len(marker)
+            marker_len = 34
             start = self._html.find(marker, spanstart)
             if start > 0:
                 endpoint = self._html.find('</span>', start + marker_len)
                 self._num_releases = self._html[start + len(marker) : endpoint]
                 self._num_releases = self._num_releases.strip()
         return self._num_releases
+
+
+    def num_contributors(self, force=False, retry=False):
+        if self.is_problem():
+            self._num_contributors = None
+        elif (self._num_contributors == None and self._html) or force:
+            spanstart = self._html.find('<ul class="numbers-summary">')
+            spanstart = self._html.find('/contributors', spanstart)
+            if spanstart < 0:
+                # If there is no release info (which can happen if the repo
+                # is empty), semantically, that's the same as 0 contributors.
+                self._num_contributors = 0
+                return self._num_contributors
+            marker = '<span class="num text-emphasized">'
+            marker_len = 34
+            start = self._html.find(marker, spanstart)
+            if start > 0:
+                endpoint = self._html.find('</span>', start + marker_len)
+                self._num_contributors = self._html[start + len(marker) : endpoint]
+                if (len(self._num_contributors) == 0 or
+                    self._num_contributors.find('Fetching') > 0) and not retry:
+                    # FIXME: Github doesn't load everything on the page right
+                    # away.  There seems to be a reactive aspect to the list
+                    # of contributors, and sometimes it comes up empty when
+                    # you get the HTML.  Unfortunately, simply re-fetching the
+                    # page does not produce an updated value.  Giving up for
+                    # now and leaving it unknown when this happens.
+                    self._num_contributors = None
+                else:
+                    self._num_contributors = self._num_contributors.strip()
+        return self._num_contributors
 
 
 
