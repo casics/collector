@@ -479,6 +479,9 @@ class GitHubIndexer():
         if page.description() != entry['description']:
             msg('added description for {}'.format(summary))
             updates['description'] = entry['description'] = page.description()
+        if page.homepage() != entry['homepage']:
+            msg('added homepage for {}'.format(summary))
+            updates['homepage'] = entry['homepage'] = page.homepage()
         if page.default_branch() != entry['default_branch']:
             msg('{} default_branch set to {}'.format(summary, page.default_branch()))
             updates['default_branch'] = entry['default_branch'] = page.default_branch()
@@ -503,6 +506,13 @@ class GitHubIndexer():
                 # value if we don't actually pull something out of the HTML.
                 msg('added {} languages for {}'.format(num_lang, summary))
                 updates['languages'] = entry['languages'] = make_languages(page_lang)
+
+        # Special case: contributors is unusual in that GitHub's value is
+        # produced reactively.  If we don't get a value from HTML it doesn't
+        # necessarily mean there is no value, so don't overwrite what we have.
+        if page.num_contributors() and page.num_contributors() != entry['num_contributors']:
+            msg('{} num_contributors set to {}'.format(summary, page.num_contributors()))
+            updates['num_contributors'] = entry['num_contributors'] = page.num_contributors()
 
         if updates:
             updates['time.data_refreshed'] = now_timestamp()
@@ -918,10 +928,10 @@ class GitHubIndexer():
 
     def print_details(self, targets={}, languages=None, start_id=0, **kwargs):
         msg('Printing descriptions of indexed GitHub repositories.')
-        width = len('NUMBER OF BRANCHES:')
+        width = len('NUM. CONTRIBUTORS:')
         filter = {}
         if start_id > 0:
-            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            msg("Skipping GitHub id's less than {}".format(start_id))
             filter['_id'] = {'$gte': start_id}
         if languages:
             msg('Limiting output to entries having languages', languages)
@@ -955,9 +965,11 @@ class GitHubIndexer():
             msg('FORK:'.ljust(width), fork_status)
             msg('CONTENT TYPE:'.ljust(width), entry['content_type'])
             msg('DEFAULT BRANCH:'.ljust(width), entry['default_branch'])
-            msg('NUMBER OF COMMITS:'.ljust(width), entry['num_commits'])
-            msg('NUMBER OF BRANCHES:'.ljust(width), entry['num_branches'])
-            msg('NUMBER OF RELEASES:'.ljust(width), entry['num_releases'])
+            msg('NUM. COMMITS:'.ljust(width), entry['num_commits'])
+            msg('NUM. BRANCHES:'.ljust(width), entry['num_branches'])
+            msg('NUM. RELEASES:'.ljust(width), entry['num_releases'])
+            if entry['num_contributors']:
+                msg('NUM. CONTRIBUTORS:'.ljust(width), entry['num_contributors'])
             if entry['files'] and entry['files'] != -1:
                 files_list = pprint.pformat(entry['files'], indent=width+1,
                                             width=(70), compact=True)
@@ -977,6 +989,7 @@ class GitHubIndexer():
             msg('UPDATED:'.ljust(width), timestamp_str(entry['time']['repo_updated']))
             msg('PUSHED:'.ljust(width), timestamp_str(entry['time']['repo_pushed']))
             msg('DATA REFRESHED:'.ljust(width), timestamp_str(entry['time']['data_refreshed']))
+            msg('EXTERNAL HOMEPAGE:'.ljust(width), entry['homepage'])
             if entry['readme'] and entry['readme'] != -1:
                 msg('README:')
                 msg(entry['readme'])
@@ -1464,7 +1477,7 @@ class GitHubIndexer():
             fields = ['files', 'default_branch', 'is_visible', 'is_deleted',
                       'owner', 'name', 'time', '_id', 'description',
                       'languages', 'fork', 'num_releases', 'num_branches',
-                      'num_commits']
+                      'num_commits', 'num_contributors', 'homepage']
             return self.entry_list(targets, fields, start_id)
 
         # And let's do it.
