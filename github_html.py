@@ -32,18 +32,21 @@ class GitHubHomePage():
 
 
     def __init__(self):
-        self._owner          = None
-        self._name           = None
-        self._url            = None
-        self._html           = None
-        self._description    = None
-        self._languages      = None
-        self._forked_from    = None
-        self._default_branch = None
-        self._files          = None
-        self._is_problem     = None
-        self._is_empty       = None
-        self._status_code    = None
+        self._owner            = None
+        self._name             = None
+        self._url              = None
+        self._html             = None
+        self._description      = None
+        self._languages        = None
+        self._forked_from      = None
+        self._default_branch   = None
+        self._files            = None
+        self._is_problem       = None
+        self._is_empty         = None
+        self._status_code      = None
+        self._num_commits      = None
+        self._num_branches     = None
+        self._num_releases     = None
 
 
     def get_html(self, owner, name):
@@ -87,6 +90,9 @@ class GitHubHomePage():
                     self.forked_from()
                     self.default_branch()
                     self.files()
+                    self.num_commits()
+                    self.num_releases()
+                    self.num_branches()
                 break
             self._status_code = r.status_code
             return r.status_code
@@ -226,7 +232,7 @@ class GitHubHomePage():
             if spanstart > 0:
                 marker = '<span class="text">forked from <a href="'
                 marker_len = len(marker)
-                start= self._html.find(marker, spanstart)
+                start = self._html.find(marker, spanstart)
                 if start > 0:
                     endpoint = self._html.find('"', start + marker_len)
                     self._forked_from = self._html[start + marker_len + 1 : endpoint]
@@ -256,7 +262,7 @@ class GitHubHomePage():
         startmarker = '"file-wrap"'
         start = self._html.find(startmarker)
         if start < 0:
-            return self._html
+            return self._files
 
         nextstart = self._html.find('<table', start + len(startmarker))
         base      = '/' + self._owner + '/' + self._name
@@ -307,6 +313,72 @@ class GitHubHomePage():
             else:
                 nextstart = min([v for v in [found_file, found_dir] if v > -1])
         return self._files
+
+
+    def num_commits(self, force=False):
+        if self.is_problem():
+            self._num_commits = None
+        elif (self._num_commits == None and self._html) or force:
+            spanstart = self._html.find('<ul class="numbers-summary">')
+            if spanstart < 0:
+                # If there are no commits (which can happen if it's empty),
+                # we legitimately can set this to 0.  Note: don't rely on only
+                # testing for empty repo, because there might have been past
+                # commits and then later the repo could have been emptied.
+                self._num_commits = 0
+                return self._num_commits
+            marker = '<span class="num text-emphasized">'
+            marker_len = len(marker)
+            start = self._html.find(marker, spanstart)
+            if start > 0:
+                endpoint = self._html.find('</span>', start + marker_len)
+                self._num_commits = self._html[start + len(marker) : endpoint]
+                self._num_commits = self._num_commits.strip()
+        return self._num_commits
+
+
+    def num_branches(self, force=False):
+        if self.is_problem():
+            self._num_branches = None
+        elif (self._num_branches == None and self._html) or force:
+            spanstart = self._html.find('<ul class="numbers-summary">')
+            spanstart = self._html.find('/branches', spanstart)
+            if spanstart < 0:
+                # If there are no branches (which can happen if it's empty),
+                # we legitimately can set this to 0.  Note: don't rely on only
+                # testing for empty repo, because there might have been past
+                # commits and then later the repo could have been emptied.
+                self._num_branches = 0
+                return self._num_branches
+            marker = '<span class="num text-emphasized">'
+            marker_len = len(marker)
+            start = self._html.find(marker, spanstart)
+            if start > 0:
+                endpoint = self._html.find('</span>', start + marker_len)
+                self._num_branches = self._html[start + len(marker) : endpoint]
+                self._num_branches = self._num_branches.strip()
+        return self._num_branches
+
+
+    def num_releases(self, force=False):
+        if self.is_problem():
+            self._num_releases = None
+        elif (self._num_releases == None and self._html) or force:
+            spanstart = self._html.find('<ul class="numbers-summary">')
+            spanstart = self._html.find('/releases', spanstart)
+            if spanstart < 0:
+                # If there is no release info (which can happen if the repo
+                # is empty), semantically, that's the same as 0 releases.
+                self._num_releases = 0
+                return self._num_releases
+            marker = '<span class="num text-emphasized">'
+            marker_len = len(marker)
+            start = self._html.find(marker, spanstart)
+            if start > 0:
+                endpoint = self._html.find('</span>', start + marker_len)
+                self._num_releases = self._html[start + len(marker) : endpoint]
+                self._num_releases = self._num_releases.strip()
+        return self._num_releases
 
 
 

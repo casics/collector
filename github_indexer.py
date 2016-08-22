@@ -326,7 +326,8 @@ class GitHubIndexer():
             # This purposefully does not change 'languages' and 'readme',
             # because they are not in the github3 structure and if we're
             # updating an existing entry in our database, we don't want to
-            # destroy those fields if we have them.
+            # destroy those fields if we have them.  Also: the github3 api
+            # does not have all the fields we store.
             fork_of = repo.parent.full_name if repo.parent else None
             fork_root = repo.source.full_name if repo.source else None
             languages = make_languages([repo.language]) if repo.language else []
@@ -485,6 +486,15 @@ class GitHubIndexer():
             num = len(page.files()) if (page.files() and page.files() != -1) else 0
             msg('added {} files for {}'.format(num, summary))
             updates['files'] = entry['files'] = page.files()
+        if page.num_commits() != entry['num_commits']:
+            msg('{} num_commits set to {}'.format(summary, page.num_commits()))
+            updates['num_commits'] = entry['num_commits'] = page.num_commits()
+        if page.num_branches() != entry['num_branches']:
+            msg('{} num_branches set to {}'.format(summary, page.num_branches()))
+            updates['num_branches'] = entry['num_branches'] = page.num_branches()
+        if page.num_releases() != entry['num_releases']:
+            msg('{} num_releases set to {}'.format(summary, page.num_releases()))
+            updates['num_releases'] = entry['num_releases'] = page.num_releases()
         if page.languages() != e_languages(entry):
             page_lang = page.languages()
             num_lang = len(page_lang) if page_lang else 0
@@ -493,6 +503,7 @@ class GitHubIndexer():
                 # value if we don't actually pull something out of the HTML.
                 msg('added {} languages for {}'.format(num_lang, summary))
                 updates['languages'] = entry['languages'] = make_languages(page_lang)
+
         if updates:
             updates['time.data_refreshed'] = now_timestamp()
             entry['time']['data_refreshed'] = updates['time.data_refreshed']
@@ -891,7 +902,7 @@ class GitHubIndexer():
         msg('Printing known GitHub id numbers.')
         filter = {}
         if start_id > 0:
-            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            msg("Skipping GitHub id's less than {}".format(start_id))
             filter['_id'] = {'$gte': start_id}
         if languages:
             msg('Limiting output to entries having languages', languages)
@@ -907,7 +918,7 @@ class GitHubIndexer():
 
     def print_details(self, targets={}, languages=None, start_id=0, **kwargs):
         msg('Printing descriptions of indexed GitHub repositories.')
-        width = len('DEFAULT BRANCH:')
+        width = len('NUMBER OF BRANCHES:')
         filter = {}
         if start_id > 0:
             msg('Skipping GitHub id\'s less than {}'.format(start_id))
@@ -944,6 +955,9 @@ class GitHubIndexer():
             msg('FORK:'.ljust(width), fork_status)
             msg('CONTENT TYPE:'.ljust(width), entry['content_type'])
             msg('DEFAULT BRANCH:'.ljust(width), entry['default_branch'])
+            msg('NUMBER OF COMMITS:'.ljust(width), entry['num_commits'])
+            msg('NUMBER OF BRANCHES:'.ljust(width), entry['num_branches'])
+            msg('NUMBER OF RELEASES:'.ljust(width), entry['num_releases'])
             if entry['files'] and entry['files'] != -1:
                 files_list = pprint.pformat(entry['files'], indent=width+1,
                                             width=(70), compact=True)
@@ -1218,7 +1232,7 @@ class GitHubIndexer():
         selected_repos = {'languages': {"$eq" : []}, 'is_deleted': False,
                           'is_visible': {"$ne" : False}}
         if start_id > 0:
-            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            msg("Skipping GitHub id's less than {}".format(start_id))
             selected_repos['_id'] = {'$gte': start_id}
         # And let's do it.
         self.loop(self.entry_list, body_function, selected_repos, targets, start_id)
@@ -1290,7 +1304,7 @@ class GitHubIndexer():
         msg('Gathering README files for repositories.')
         selected_repos = {'is_deleted': False}
         if start_id > 0:
-            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            msg("Skipping GitHub id's less than {}".format(start_id))
             selected_repos['_id'] = {'$gte': start_id}
         if force:
             # "Force" in this context means get readmes even if we previously
@@ -1370,7 +1384,7 @@ class GitHubIndexer():
         # Set up selection criteria and start the loop
         selected_repos = {}
         if start_id > 0:
-            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            msg("Skipping GitHub id's less than {}".format(start_id))
             selected_repos['_id'] = {'$gte': start_id}
         self.loop(repo_iterator, body_function, selected_repos, targets or last_seen, start_id)
 
@@ -1422,7 +1436,7 @@ class GitHubIndexer():
         msg('Inferring content_type for repositories.')
         selected_repos = {'is_deleted': False, 'is_visible': True}
         if start_id > 0:
-            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            msg("Skipping GitHub id's less than {}".format(start_id))
             selected_repos['_id'] = {'$gte': start_id}
         self.loop(self.entry_list, body_function, selected_repos, targets, start_id)
 
@@ -1449,7 +1463,8 @@ class GitHubIndexer():
         def iterator(targets, start_id):
             fields = ['files', 'default_branch', 'is_visible', 'is_deleted',
                       'owner', 'name', 'time', '_id', 'description',
-                      'languages', 'fork']
+                      'languages', 'fork', 'num_releases', 'num_branches',
+                      'num_commits']
             return self.entry_list(targets, fields, start_id)
 
         # And let's do it.
@@ -1461,7 +1476,7 @@ class GitHubIndexer():
             # already have files data.
             selected_repos = {'is_deleted': False, 'is_visible': True, 'files': []}
         if start_id > 0:
-            msg('Skipping GitHub id\'s less than {}'.format(start_id))
+            msg("Skipping GitHub id's less than {}".format(start_id))
             selected_repos['_id'] = {'$gte': start_id}
         # Note: the selector only has effect when targets are not explicit.
         self.loop(iterator, body_function, selected_repos, targets, start_id)
