@@ -300,9 +300,10 @@ class GitHubHomePage():
             return self._files
         nextstart   = min([v for v in [found_file, found_dir] if v > -1])
         section     = self._html[nextstart : self._html.find('</table', nextstart)]
-        filepat     = filepat + self._default_branch + '/'
+        url_name    = urllib.parse.quote_plus(self._default_branch)
+        filepat     = filepat + url_name + '/'
         filepat_len = len(filepat)
-        dirpat      = dirpat + self._default_branch + '/'
+        dirpat      = dirpat + url_name + '/'
         dirpat_len  = len(dirpat)
         # Now look inside the section were files are found.
         found_file  = section.find(filepat)
