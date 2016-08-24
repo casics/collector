@@ -610,6 +610,7 @@ class GitHubIndexer():
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
         count = 0
         failures = 0
+        retry_after_max_failures = True
         start = time()
         # By default, only consider those entries without language info.
         for entry in iterator(targets or selector, start_id=start_id):
@@ -633,12 +634,10 @@ class GitHubIndexer():
                             # Occasionally get 403 even when not over the limit.
                             msg('*** GitHub code 403 for {}'.format(e_summary(entry)))
                             self.mark_entry_invisible(entry)
-                            retry = False
                             failures += 1
                     elif err.code == 451:
                         msg('*** GitHub code 451 (blocked) for {}'.format(e_summary(entry)))
                         self.mark_entry_invisible(entry)
-                        retry = False
                     else:
                         msg('*** GitHub API exception: {0}'.format(err))
                         failures += 1
@@ -650,11 +649,18 @@ class GitHubIndexer():
                     # Something unexpected.  Don't retry this entry, but count
                     # this failure in case we're up against a roadblock.
                     failures += 1
-                    retry = False
 
             if failures >= self._max_failures:
-                msg('*** Stopping because of too many consecutive failures')
-                break
+                # Pause & continue once, in case of transient network issues.
+                if retry_after_max_failures:
+                    msg('*** Pausing because of too many consecutive failures')
+                    sleep(120)
+                    failures = 0
+                    retry_after_max_failures = False
+                else:
+                    # We've already paused & restarted once.
+                    msg('*** Stopping because of too many consecutive failures')
+                    break
             count += 1
             if count % 100 == 0:
                 msg('{} [{:2f}]'.format(count, time() - start))
