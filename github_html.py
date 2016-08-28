@@ -359,6 +359,7 @@ class GitHubHomePage():
                 endpoint = self._html.find('</span>', start + marker_len)
                 self._num_commits = self._html[start + len(marker) : endpoint]
                 self._num_commits = self._num_commits.strip()
+                self._num_commits = int(self._num_commits.replace(',', ''))
         return self._num_commits
 
 
@@ -382,6 +383,7 @@ class GitHubHomePage():
                 endpoint = self._html.find('</span>', start + marker_len)
                 self._num_branches = self._html[start + len(marker) : endpoint]
                 self._num_branches = self._num_branches.strip()
+                self._num_branches = int(self._num_branches.replace(',', ''))
         return self._num_branches
 
 
@@ -403,6 +405,7 @@ class GitHubHomePage():
                 endpoint = self._html.find('</span>', start + marker_len)
                 self._num_releases = self._html[start + len(marker) : endpoint]
                 self._num_releases = self._num_releases.strip()
+                self._num_releases = int(self._num_releases.replace(',', ''))
         return self._num_releases
 
 
@@ -434,6 +437,7 @@ class GitHubHomePage():
                     self._num_contributors = None
                 else:
                     self._num_contributors = self._num_contributors.strip()
+                    self._num_contributors = int(self._num_contributors.replace(',', ''))
         return self._num_contributors
 
 
