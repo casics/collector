@@ -23,7 +23,6 @@ import github3
 import humanize
 import socket
 import langid
-import iso639
 from base64 import b64encode
 from datetime import datetime
 from time import time, sleep
