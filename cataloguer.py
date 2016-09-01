@@ -78,7 +78,7 @@ from github_indexer import GitHubIndexer
 # should hopefully be possible.  See later in this file for the definition
 # of the arguments to main().
 
-def main(acct=None, api_only=False, create=False,
+def main(acct=None, api_only=False, create=False, text_lang=False,
          file=None, force=False, get_files=False, prefer_http=False, id=None,
          lang=None, index_langs=False, print_details=False, print_stats=False,
          index_readmes=False, print_summary=False, print_ids=False,
@@ -115,6 +115,7 @@ def main(acct=None, api_only=False, create=False,
     elif list_deleted:    call('list_deleted',      login=acct, **args)
     elif infer_type:      call('infer_type',        login=acct, **args)
     elif get_files:       call('add_files',         login=acct, **args)
+    elif text_lang:       call('detect_text_lang',  login=acct, **args)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
@@ -188,25 +189,26 @@ def github_info(hosting_service, service_account):
 # Plac automatically adds a -h argument for help, so no need to do it here.
 
 main.__annotations__ = dict(
-    acct            = ('use specified GitHub account login',          'option', 'a'),
-    api_only        = ('only use the API, without first trying HTTP', 'flag',   'A'),
-    create          = ('create database entries by querying GitHub',  'flag',   'c'),
-    file            = ('use subset of repo names or id\'s from file', 'option', 'f'),
-    force           = ('get info even if we know we already tried',   'flag',   'F'),
-    get_files       = ('get list of files at repo top level',         'flag',   'g'),
-    prefer_http     = ('prefer HTTP without using API, if possible',  'flag'  , 'H'),
-    id              = ('start iterations with this GitHub id',        'option', 'I'),
-    lang            = ('limit printing to specific languages',        'option', 'L'),
-    index_langs     = ('gather programming languages',                'flag',   'l'),
-    print_details   = ('print details about entries',                 'flag',   'p'),
-    print_stats     = ('print summary of database statistics',        'flag',   'P'),
-    index_readmes   = ('gather README files',                         'flag',   'r'),
-    print_summary   = ('print list of indexed repositories'   ,       'flag',   's'),
-    print_ids       = ('print all known repository id numbers',       'flag',   'S'),
-    infer_type      = ('try to guess if repos contain noncode',       'flag',   't'),
-    list_deleted    = ('list deleted entries',                        'flag',   'x'),
-    delete          = ('mark specific entries as deleted',            'flag',   'X'),
-    repos           = 'one or more repository identifiers or names',
+    acct          = ('use specified GitHub account login',            'option', 'a'),
+    api_only      = ('only use the API, without first trying HTTP',   'flag',   'A'),
+    create        = ('create database entries by querying GitHub',    'flag',   'c'),
+    file          = ('use subset of repo names or id\'s from file',   'option', 'f'),
+    force         = ('get info even if we know we already tried',     'flag',   'F'),
+    get_files     = ('get list of files at repo top level',           'flag',   'g'),
+    prefer_http   = ('prefer HTTP without using API, if possible',    'flag'  , 'H'),
+    infer_type    = ('try to infer if repos contain code or not',     'flag',   'i'),
+    id            = ('start iterations with this GitHub id',          'option', 'I'),
+    lang          = ('limit printing to specific languages',          'option', 'L'),
+    index_langs   = ('gather programming languages',                  'flag',   'l'),
+    print_details = ('print details about entries',                   'flag',   'p'),
+    print_stats   = ('print summary of database statistics',          'flag',   'P'),
+    index_readmes = ('gather README files',                           'flag',   'r'),
+    print_summary = ('print list of indexed repositories'   ,         'flag',   's'),
+    print_ids     = ('print all known repository id numbers',         'flag',   'S'),
+    text_lang     = ('detect text languages in description & readme', 'flag',   't'),
+    list_deleted  = ('list deleted entries',                          'flag',   'x'),
+    delete        = ('mark specific entries as deleted',              'flag',   'X'),
+    repos         = 'one or more repository identifiers or names',
 )
 
 # Entry point

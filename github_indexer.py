@@ -22,6 +22,8 @@ import urllib
 import github3
 import humanize
 import socket
+import langid
+import iso639
 from base64 import b64encode
 from datetime import datetime
 from time import time, sleep
@@ -953,17 +955,24 @@ class GitHubIndexer():
                     entry['description'].encode(sys.stdout.encoding, errors='replace'))
             else:
                 msg('DESCRIPTION:')
+            if entry['text_languages'] and entry['text_languages'] != -1:
+                msg('TEXT LANGUAGES:'.ljust(width),
+                    ', '.join(x + ' (' + name_for_language_code(x) + ')'
+                              for x in entry['text_languages']))
+            else:
+                msg('TEXT LANGUAGES:')
             if entry['languages'] and entry['languages'] != -1:
                 lang_list = pprint.pformat(e_languages(entry), indent=width+1,
                                            width=70, compact=True)
+                lang_list = lang_list.replace("'", "")
                 # Get rid of leading and trailing cruft
                 if len(lang_list) > 70:
                     lang_list = lang_list[width+1:-1]
                 else:
                     lang_list = lang_list[1:-1]
-                msg('LANGUAGES:'.ljust(width), lang_list)
+                msg('CODE LANGUAGES:'.ljust(width), lang_list)
             else:
-                msg('LANGUAGES:')
+                msg('CODE LANGUAGES:')
             if entry['fork'] and entry['fork']['parent']:
                 fork_status = 'Yes, forked from ' + entry['fork']['parent']
             else:
@@ -1497,5 +1506,53 @@ class GitHubIndexer():
         if start_id > 0:
             msg("Skipping GitHub id's less than {}".format(start_id))
             selected_repos['_id'] = {'$gte': start_id}
+        # Note: the selector only has effect when targets are not explicit.
+        self.loop(iterator, body_function, selected_repos, targets, start_id)
+
+
+    def detect_text_lang(self, targets=None, force=False,
+                         start_id=None, **kwargs):
+
+        def body_function(entry):
+            info = e_summary(entry)
+            if not force:
+                if entry['text_languages']:
+                    msg('*** {} has text_language -- skipping'.format(info))
+                    return
+            current_langs = entry['text_languages']
+            no_text = True
+            if entry['description'] and entry['description'] != -1:
+                lang, _ = langid.classify(entry['description'])
+                current_langs.append(lang)
+                no_text = False
+            if entry['readme'] and entry['readme'] != -1:
+                lang, _ = langid.classify(entry['readme'])
+                current_langs.append(lang)
+                no_text = False
+            current_langs = list(set(current_langs))
+            if current_langs:
+                self.db.update({'_id': entry['_id']},
+                               {'$set': {'text_languages': current_langs}})
+                msg('{} languages inferred to be {}'.format(info, current_langs))
+            elif no_text:
+                msg('{} has no description or readme'.format(info))
+            else:
+                msg('could not infer language for {}'.format(info))
+
+        def iterator(targets, start_id):
+            fields = ['description', 'readme', 'text_languages', '_id',
+                      'owner', 'name', 'is_deleted', 'is_visible']
+            return self.entry_list(targets, fields, start_id)
+
+        # And let's do it.
+        msg('Examining text in description and readme fields.')
+        selected_repos = {}
+        if not force:
+            selected_repos['text_languages'] = []
+        if start_id > 0:
+            msg("Skipping GitHub id's less than {}".format(start_id))
+            selected_repos['_id'] = {'$gte': start_id}
+        if selected_repos == {}:
+            selected_repos = None
         # Note: the selector only has effect when targets are not explicit.
         self.loop(iterator, body_function, selected_repos, targets, start_id)
