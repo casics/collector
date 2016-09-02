@@ -23,6 +23,10 @@ import github3
 import humanize
 import socket
 import langid
+import markdown
+import re
+import warnings
+from bs4 import BeautifulSoup
 from base64 import b64encode
 from datetime import datetime
 from time import time, sleep
@@ -1512,29 +1516,71 @@ class GitHubIndexer():
     def detect_text_lang(self, targets=None, force=False,
                          start_id=None, **kwargs):
 
+        min_readme_length = 125
+        min_description_length = 60
+
+        def guess_markdown(text):
+            if not isinstance(text, str):
+                text = text.decode()
+            return re.search('^#', text) or text.find('](')
+
+        def guess_html(text):
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                return BeautifulSoup(text, 'html.parser').find()
+
+        def remove_html(text):
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                return ''.join(BeautifulSoup(text, 'lxml').findAll(text=True))
+
         def body_function(entry):
             info = e_summary(entry)
             if not force:
                 if entry['text_languages']:
                     msg('*** {} has text_language -- skipping'.format(info))
                     return
-            current_langs = entry['text_languages']
+                current_langs = entry['text_languages']
+            else:
+                current_langs = []
             no_text = True
-            if entry['description'] and entry['description'] != -1:
-                lang, _ = langid.classify(entry['description'])
-                current_langs.append(lang)
-                no_text = False
+            # The best inferences come from long text.  The langid module
+            # gets things wrong for short text with unusual terms (which is
+            # typical for programmer-speak).  So the approach is: if we have
+            # a README and it's reasonably long, we use that exclusively;
+            # otherwise, we try the description but only if it's long enough.
             if entry['readme'] and entry['readme'] != -1:
-                lang, _ = langid.classify(entry['readme'])
-                current_langs.append(lang)
-                no_text = False
-            current_langs = list(set(current_langs))
-            if current_langs:
+                readme = entry['readme']
+                if not isinstance(readme, str):
+                    readme = readme.decode().encode('ascii', 'ignore')
+                if guess_html(readme):
+                    readme = remove_html(readme)
+                elif guess_markdown(readme):
+                    # Use Markdown formatter to generate HTML, then strip it.
+                    readme = remove_html(markdown.markdown(readme))
+                if len(readme) > min_readme_length:
+                    lang, _ = langid.classify(readme)
+                    current_langs.append(lang)
+                    no_text = False
+            elif entry['description'] and entry['description'] != -1:
+                description = entry['description']
+                if not isinstance(description, str):
+                    description = description.decode().encode('ascii', 'ignore')
+                if guess_html(description):
+                    description = remove_html(description)
+                if len(description) > min_description_length:
+                    lang, _ = langid.classify(description)
+                    current_langs.append(lang)
+                    no_text = False
+            if current_langs or force:
+                # If we couldn't make an inference, we set it to -1.
+                current_langs = list(set(current_langs)) or -1
                 self.db.update({'_id': entry['_id']},
                                {'$set': {'text_languages': current_langs}})
                 msg('{} languages inferred to be {}'.format(info, current_langs))
             elif no_text:
-                msg('{} has no description or readme'.format(info))
+                self.db.update({'_id': entry['_id']}, {'$set': {'text_languages': -1}})
+                msg('{} has no description or readme, or they are too short'.format(info))
             else:
                 msg('could not infer language for {}'.format(info))
 
