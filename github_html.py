@@ -222,11 +222,15 @@ class GitHubHomePage():
             # It seems that even if a repo is empty, the "recent commits" link
             # exists.  It has the following form:
             #   <link href="https://github.com/OWNER/NAME/commits/BRANCH.atom" ...
-            marker = '<link href="' + self._url + '/commits/'
+            # We look only for the string '/commits' from the top, because
+            # the full link sometimes uses a different owner or repo name
+            # than the actual repo owner+name.  (Maybe as a result of the
+            # repo being renamed at some point?)
+            marker = '/commits/'
             start = self._html.find(marker)
             if start > 0:
                 endpoint = self._html.find('.atom', start)
-                self._default_branch = self._html[start + len(marker) : endpoint]
+                self._default_branch = self._html[start + 9 : endpoint]
         return self._default_branch
 
 
