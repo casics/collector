@@ -60,8 +60,11 @@ class GitHubHomePage():
         try:
             url = self.url()
             for _ in range(0, self._max_retries):
-                r = requests.get(url)
-                if r.status_code == 202:
+                r = timed_get(url, verify=False)
+                if r == None:
+                    # Network timeout or other serious problem.
+                    raise NetworkAccessException('Cannot access {}: {}'.format(url, err))
+                elif r.status_code == 202:
                     # 202 = "accepted". We try again after a pause.
                     sleep(self._retries_pause_sec)
                     continue
@@ -105,7 +108,7 @@ class GitHubHomePage():
             self._status_code = r.status_code
             return r.status_code
         except Exception as err:
-            raise NetworkAccessException('Getting GitHub page HTML', err)
+            raise NetworkAccessException('Getting GitHub page HTML: {}'.format(err), err)
 
 
     def status_code(self):
@@ -304,7 +307,12 @@ class GitHubHomePage():
             return self._files
         nextstart   = min([v for v in [found_file, found_dir] if v > -1])
         section     = self._html[nextstart : self._html.find('</table', nextstart)]
-        url_name    = urllib.parse.quote_plus(self._default_branch)
+        if self._default_branch.find('&'):
+            # The default branch might already have been URL-encoded, if it
+            # contains special characters.  If so, don't encode it a 2nd time.
+            url_name = self._default_branch
+        else:
+            url_name = urllib.parse.quote_plus(self._default_branch, '!/;')
         filepat     = filepat + url_name + '/'
         filepat_len = len(filepat)
         dirpat      = dirpat + url_name + '/'
@@ -312,6 +320,8 @@ class GitHubHomePage():
         # Now look inside the section were files are found.
         found_file  = section.find(filepat)
         found_dir   = section.find(dirpat)
+        if found_file < 0 and found_dir < 0:
+            import ipdb; ipdb.set_trace()
         nextstart = min([v for v in [found_file, found_dir] if v > -1])
         self._files = []
         while nextstart >= 0:
