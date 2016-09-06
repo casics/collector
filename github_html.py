@@ -307,7 +307,7 @@ class GitHubHomePage():
             return self._files
         nextstart   = min([v for v in [found_file, found_dir] if v > -1])
         section     = self._html[nextstart : self._html.find('</table', nextstart)]
-        if self._default_branch.find('&'):
+        if self._default_branch.find('&') > 0:
             # The default branch might already have been URL-encoded, if it
             # contains special characters.  If so, don't encode it a 2nd time.
             url_name = self._default_branch
