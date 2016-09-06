@@ -13,10 +13,8 @@
 import sys
 import os
 import operator
-import requests
 import json
 import http
-import requests
 import pprint
 import urllib
 import github3
@@ -1053,7 +1051,11 @@ class GitHubIndexer():
     def get_readme(self, entry, prefer_http=False, api_only=False):
 
         def get_raw(url):
-            r = requests.get(url)
+            r = timed_get(url, verify=False)
+            if not r:
+                # 408 is a standard http code for a time out.  May as well use
+                # that here, as we need to return a number.
+                return (408, None)
             code = r.status_code
             if code in [200, 203, 206]:
                 # Got it, but watch out for bad files.  Threshold at 5 MB.
@@ -1130,8 +1132,8 @@ class GitHubIndexer():
                 exts = ['', '.md', '.txt', '.markdown', '.rdoc', '.rst']
                 for ext in exts:
                     alternative = base_url + '/master/README' + ext
-                    r = requests.get(alternative)
-                    if r.status_code == 200:
+                    r = timed_get(alternative, verify=False)
+                    if r and r.status_code == 200:
                         return ('http', r.text)
 
         # If we get here and we're only doing HTTP, then we're done.
