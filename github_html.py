@@ -223,7 +223,6 @@ class GitHubHomePage():
         if self.is_problem():
             self._default_branch = None
         elif (self._default_branch == None and self._html) or force:
-            import ipdb; ipdb.set_trace()
             # It seems that even if a repo is empty, the "recent commits" link
             # exists.  It has the following form:
             #   <link href="https://github.com/OWNER/NAME/commits/BRANCH.atom" ...
