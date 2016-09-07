@@ -14,6 +14,7 @@ import os
 import requests
 import sys
 import urllib
+import html
 from time import sleep
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../common"))
@@ -233,7 +234,7 @@ class GitHubHomePage():
             start = self._html.find(marker)
             if start > 0:
                 endpoint = self._html.find('.atom', start)
-                self._default_branch = self._html[start + 9 : endpoint]
+                self._default_branch = html.unescape(self._html[start + 9 : endpoint])
         return self._default_branch
 
 
@@ -307,12 +308,7 @@ class GitHubHomePage():
             return self._files
         nextstart   = min([v for v in [found_file, found_dir] if v > -1])
         section     = self._html[nextstart : self._html.find('</table', nextstart)]
-        if self._default_branch.find('&') > -1 or self._default_branch.find('%') > -1:
-            # The default branch might already have been URL-encoded, if it
-            # contains special characters.  If so, don't encode it a 2nd time.
-            url_name = self._default_branch
-        else:
-            url_name = urllib.parse.quote_plus(self._default_branch, '!/;')
+        url_name    = html_encode(self._default_branch)
         filepat     = filepat + url_name + '/'
         filepat_len = len(filepat)
         dirpat      = dirpat + url_name + '/'
