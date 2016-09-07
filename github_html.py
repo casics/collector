@@ -233,7 +233,7 @@ class GitHubHomePage():
             marker = '.atom'
             endpoint = self._html.find(marker)
             if endpoint > 0:
-                start = self._html.rfind('/', 0, endpoint) + 1
+                start = self._html.rfind('commits/', 0, endpoint) + 8
                 self._default_branch = html.unescape(self._html[start : endpoint])
         return self._default_branch
 
