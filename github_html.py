@@ -230,11 +230,11 @@ class GitHubHomePage():
             # the full link sometimes uses a different owner or repo name
             # than the actual repo owner+name.  (Maybe as a result of the
             # repo being renamed at some point?)
-            marker = '/commits/'
-            start = self._html.find(marker)
-            if start > 0:
-                endpoint = self._html.find('.atom', start)
-                self._default_branch = html.unescape(self._html[start + 9 : endpoint])
+            marker = '.atom'
+            endpoint = self._html.find(marker)
+            if endpoint > 0:
+                start = self._html.rfind('/', 0, endpoint) + 1
+                self._default_branch = html.unescape(self._html[start : endpoint])
         return self._default_branch
 
 
