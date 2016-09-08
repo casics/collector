@@ -648,7 +648,7 @@ class GitHubIndexer():
                         retry = True
                 except Exception as err:
                     msg('*** Exception for {} -- skipping it -- {}'.format(
-                        e_summary(entry), err))
+                        e_summary(entry), str(err)))
                     # Something unexpected.  Don't retry this entry, but count
                     # this failure in case we're up against a roadblock.
                     failures += 1
