@@ -28,6 +28,12 @@ class NetworkAccessException(Exception):
         self.code = code
 
 
+class PageParsingException(Exception):
+    def __init__(self, message, code):
+        super(PageParsingException, self).__init__(message)
+        self.code = code
+
+
 class GitHubHomePage():
     _max_retries = 3
     _retries_pause_sec = 0.5
@@ -109,7 +115,7 @@ class GitHubHomePage():
             self._status_code = r.status_code
             return r.status_code
         except Exception as err:
-            raise NetworkAccessException('Getting GitHub page HTML: {}'.format(err), err)
+            raise PageParsingException('Getting GitHub page HTML: {}'.format(err), err)
 
 
     def status_code(self):
@@ -317,7 +323,8 @@ class GitHubHomePage():
         found_file  = section.find(filepat)
         found_dir   = section.find(dirpat)
         if found_file < 0 and found_dir < 0:
-            import ipdb; ipdb.set_trace()
+            raise PageParsingException('Problem parsing files list for {}'.format(
+                self.full_name()))
         nextstart = min([v for v in [found_file, found_dir] if v > -1])
         self._files = []
         while nextstart >= 0:
