@@ -843,7 +843,7 @@ class GitHubIndexer():
 
 
     def summarize_readme_stats(self, targets=None):
-        c = self.db.count({'readme':  {'$nin': ['', -1, -2, None]},
+        c = self.db.count({'readme':  {'$nin': [-1, -2, None]},
                                       'is_visible': True})
         c = humanize.intcomma(c)
         msg('{} visible entries have README content.'.format(c))
