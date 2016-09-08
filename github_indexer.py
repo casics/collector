@@ -1212,10 +1212,10 @@ class GitHubIndexer():
             branch = '/branches/' + entry['default_branch']
         path = 'https://github.com/' + e_path(entry) + branch
         try:
-            (code, output, err) = shell_cmd(['svn', 'ls', path])
+            (code, output, err) = shell_cmd(['svn', '--non-interactive', 'ls', path])
         except Exception as ex:
             raise UnexpectedResponseException(ex)
-        if code == 0:
+        if code <= 0:
             if output:
                 files = output.split('\n')
                 files = [f for f in files if f]  # Remove empty strings.
@@ -1226,9 +1226,11 @@ class GitHubIndexer():
         elif code == 1 and err.find('non-existent') > 1:
             msg('{} found empty'.format(e_summary(entry)))
             self.update_entry_field(entry, 'files', -1)
+        elif code == 1 and err.find('authorization failed') > 1:
+            msg('{} svn access requires authentication'.format(e_summary(entry)))
         else:
-            msg('*** Error for {}: {}'.format(e_summary(entry), err))
-            import ipdb; ipdb.set_trace()
+            raise UnexpectedResponseException('{}: {}'.format(
+                e_summary(entry), str(err)), err)
 
 
     def add_languages(self, targets=None, force=False, prefer_http=False,
