@@ -24,12 +24,14 @@ from utils import *
 
 class NetworkAccessException(Exception):
     def __init__(self, message, code):
+        message = str(message).encode('utf-8')
         super(NetworkAccessException, self).__init__(message)
         self.code = code
 
 
 class PageParsingException(Exception):
     def __init__(self, message, code):
+        message = str(message).encode('utf-8')
         super(PageParsingException, self).__init__(message)
         self.code = code
 
