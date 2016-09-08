@@ -1346,9 +1346,9 @@ class GitHubIndexer():
         if force:
             # "Force" in this context means get readmes even if we previously
             # tried to get them, which is indicated by a -1 or -2 value.
-            selected_repos['readme'] = {'$in': ['', -1, -2]}
+            selected_repos['readme'] = {'$in': [None, -1, -2]}
         else:
-            selected_repos['readme'] = ''
+            selected_repos['readme'] = None
 
         # And let's do it.
         self.loop(self.entry_list, body_function, selected_repos, targets, start_id)
