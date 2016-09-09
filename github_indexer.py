@@ -400,9 +400,12 @@ class GitHubIndexer():
         if entry['name'] != repo.name:
             msg('{} repo name changed to {}'.format(summary, repo.name))
             updates['name'] = entry['name'] = repo.name
-        if entry['description'] != repo.description.strip():
-            msg('{} description changed'.format(summary))
-            updates['description'] = entry['description'] = repo.description.strip()
+        if repo.description:
+            if entry['description'] != repo.description.strip():
+                msg('{} description changed'.format(summary))
+                updates['description'] = entry['description'] = repo.description.strip()
+        elif entry['description'] == None:
+            updates['description'] = entry['description'] = -1
         if entry['default_branch'] != repo.default_branch:
             msg('{} default_branch changed to {}'.format(summary, repo.default_branch))
             updates['default_branch'] = entry['default_branch'] = repo.default_branch
@@ -953,7 +956,7 @@ class GitHubIndexer():
             msg('URL:'.ljust(width), self.github_url(entry))
             msg('NAME:'.ljust(width), entry['name'])
             msg('OWNER:'.ljust(width), entry['owner'])
-            if entry['description']:
+            if entry['description'] and entry['description'] != -1:
                 msg('DESCRIPTION:'.ljust(width),
                     entry['description'].encode(sys.stdout.encoding, errors='replace'))
             else:
