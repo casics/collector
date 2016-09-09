@@ -164,8 +164,10 @@ class GitHubHomePage():
                 marker = '<title>'
                 start = self._html.find(marker)
             if start > 0:
-                endpoint = self._html.find('/', start)
-                self._owner = self._html[start + len(marker) : endpoint].strip()
+                endtitle = self._html.find('</title>', start)
+                endpoint = self._html.find('/', start, endtitle)
+                if endpoint > 0:
+                    self._owner = self._html[start + len(marker) : endpoint].strip()
         return self._owner
 
 
@@ -175,25 +177,37 @@ class GitHubHomePage():
             #   <title>GitHub - owner/name
             #   <title>owner/name
             marker = '<title>GitHub '
-            start = self._html.find(marker)
+            start = self._html.find(marker, 0)
             if start < 0:
                 marker = '<title>'
-                start = self._html.find(marker)
-            start = self._html.find('/', start)
+                start = self._html.find(marker, 0)
+            endtitle = self._html.find('</title>')
+            start = self._html.find('/', start, endtitle)
             if start > 0:
                 # Skip the slash.
                 start += 1
-                endbound = self._html.find('</title>', start)
-                endpoint = self._html.find(':', start, endbound)
+                endpoint = self._html.find(':', start, endtitle)
                 if endpoint > 0:
                     self._name = self._html[start : endpoint]
                 else:
-                    endpoint = self._html.find(' · GitHub', start)
-                    if endpoint > 0:
+                    endpoint = self._html.find(' · GitHub', start, endtitle)
+                    if endpoint >= 0:
                         self._name = self._html[start : endpoint]
                     else:
-                        endpoint = self._html.find(':', start, endbound)
-                        self._name = self._html[start : endbound]
+                        self._name = self._html[start : endtitle]
+
+                    # if endpoint > 0:
+                    #     self._name = self._html[start : endpoint]
+                    # else:
+                    #     endpoint = self._html.find(' - GitHub', start, endbound)
+                    #     if endpoint > 0:
+                    #         self._name = self._html[start : endpoint]
+                    #     else:
+                    #         endpoint = self._html.find(':', start, endbound)
+                    #         self._name = self._html[start : endbound]
+            else:
+                raise PageParsingException('Cannot parse HTML repo name for {}'.format(
+                    self.full_name()), None)
         return self._name
 
 
@@ -326,7 +340,7 @@ class GitHubHomePage():
         found_dir   = section.find(dirpat)
         if found_file < 0 and found_dir < 0:
             raise PageParsingException('Problem parsing files list for {}'.format(
-                self.full_name()))
+                self.full_name()), None)
         nextstart = min([v for v in [found_file, found_dir] if v > -1])
         self._files = []
         while nextstart >= 0:
