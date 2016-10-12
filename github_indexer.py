@@ -961,7 +961,7 @@ class GitHubIndexer():
                     entry['description'].encode(sys.stdout.encoding, errors='replace'))
             else:
                 msg('DESCRIPTION:')
-            if entry['text_languages'] and entry['text_languages'] != -1:
+            if 'text_languages' in entry and entry['text_languages'] != -1:
                 msg('TEXT LANGUAGES:'.ljust(width),
                     ', '.join(x + ' (' + name_for_language_code(x) + ')'
                               for x in entry['text_languages']))
@@ -985,6 +985,44 @@ class GitHubIndexer():
                 fork_status = 'No'
             msg('FORK:'.ljust(width), fork_status)
             msg('CONTENT TYPE:'.ljust(width), entry['content_type'])
+            if 'lcsh' in entry['topics']:
+                topics_list = pprint.pformat(entry['topics']['lcsh'],
+                                             indent=width+1,
+                                             width=70, compact=True)
+                topics_list = topics_list.replace("'", "")
+                # Get rid of leading and trailing cruft
+                if len(topics_list) > 70:
+                    topics_list = topics_list[width+1:-1]
+                else:
+                    topics_list = topics_list[1:-1]
+                msg('TOPICS:'.ljust(width), topics_list)
+            else:
+                msg('TOPICS:')
+            if 'usage' in entry:
+                usage_list = pprint.pformat(entry['usage'], indent=width+1,
+                                             width=70, compact=True)
+                usage_list = usage_list.replace("'", "")
+                # Get rid of leading and trailing cruft
+                if len(usage_list) > 70:
+                    usage_list = usage_list[width+1:-1]
+                else:
+                    usage_list = usage_list[1:-1]
+                msg('USAGE:'.ljust(width), usage_list)
+            else:
+                msg('USAGE:')
+            if 'interfaces' in entry:
+                interfaces_list = pprint.pformat(entry['interfaces'],
+                                                 indent=width+1,
+                                                 width=70, compact=True)
+                interfaces_list = interfaces_list.replace("'", "")
+                # Get rid of leading and trailing cruft
+                if len(interfaces_list) > 70:
+                    interfaces_list = interfaces_list[width+1:-1]
+                else:
+                    interfaces_list = interfaces_list[1:-1]
+                msg('INTERFACES:'.ljust(width), interfaces_list)
+            else:
+                msg('INTERFACES:')
             msg('DEFAULT BRANCH:'.ljust(width), entry['default_branch'])
             msg('NUM. COMMITS:'.ljust(width), entry['num_commits'])
             msg('NUM. BRANCHES:'.ljust(width), entry['num_branches'])
