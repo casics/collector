@@ -1023,6 +1023,17 @@ class GitHubIndexer():
                 msg('TOPICS:'.ljust(width), topics_list)
             else:
                 msg('TOPICS:')
+            if 'notes' in entry:
+                notes = pprint.pformat(entry['notes'], indent=width+1,
+                                            width=70, compact=True)
+                # Get rid of leading and trailing cruft
+                if len(notes) > 70:
+                    notes = notes[width+1:-1]
+                else:
+                    notes = notes[1:-1]
+                msg('NOTES:'.ljust(width), notes)
+            else:
+                msg('NOTES:')
             msg('DEFAULT BRANCH:'.ljust(width), entry['default_branch'])
             msg('NUM. COMMITS:'.ljust(width), entry['num_commits'])
             msg('NUM. BRANCHES:'.ljust(width), entry['num_branches'])
