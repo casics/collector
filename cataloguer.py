@@ -104,23 +104,23 @@ def main(api_only=False, create=False, text_lang=False,
     args = {'targets': repos, 'languages': lang, 'prefer_http': prefer_http,
             'api_only': api_only, 'force': force, 'start_id': id}
 
-    if   print_stats:     call('print_stats'  ,     login=user, **args)
-    elif print_summary:   call('print_summary',     login=user, **args)
-    elif print_ids:       call('print_indexed_ids', login=user, **args)
-    elif print_details:   call('print_details',     login=user, **args)
-    elif create:          call('create_entries',    login=user, **args)
-    elif index_langs:     call('add_languages',     login=user, **args)
-    elif index_readmes:   call('add_readmes',       login=user, **args)
-    elif delete:          call('mark_deleted',      login=user, **args)
-    elif list_deleted:    call('list_deleted',      login=user, **args)
-    elif infer_type:      call('infer_type',        login=user, **args)
-    elif get_files:       call('add_files',         login=user, **args)
-    elif text_lang:       call('detect_text_lang',  login=user, **args)
+    if   print_stats:     call('print_stats'  ,     user=user, **args)
+    elif print_summary:   call('print_summary',     user=user, **args)
+    elif print_ids:       call('print_indexed_ids', user=user, **args)
+    elif print_details:   call('print_details',     user=user, **args)
+    elif create:          call('create_entries',    user=user, **args)
+    elif index_langs:     call('add_languages',     user=user, **args)
+    elif index_readmes:   call('add_readmes',       user=user, **args)
+    elif delete:          call('mark_deleted',      user=user, **args)
+    elif list_deleted:    call('list_deleted',      user=user, **args)
+    elif infer_type:      call('infer_type',        user=user, **args)
+    elif get_files:       call('add_files',         user=user, **args)
+    elif text_lang:       call('detect_text_lang',  user=user, **args)
     else:
         raise SystemExit('No action specified. Use -h for help.')
 
 
-def call(action, login, **kwargs):
+def call(action, user, **kwargs):
     msg('Started at ', datetime.now())
 
     started = timer()
@@ -129,11 +129,11 @@ def call(action, login, **kwargs):
     # Do each host in turn.  (Currently we handle only GitHub.)
     try:
         # Find out how we log into the hosting service.
-        (github_login, github_password) = github_info('github', login)
+        (github_user, github_password) = casicsdb.login('github', user)
         # Open our Mongo database.
         github_db = casicsdb.open('github')
         # Initialize our worker object.
-        indexer = GitHubIndexer(github_login, github_password, github_db)
+        indexer = GitHubIndexer(github_user, github_password, github_db)
 
         # Figure out what action we're supposed to perform, and do it.
         method = getattr(indexer, action, None)
@@ -145,42 +145,6 @@ def call(action, login, **kwargs):
     stopped = timer()
     msg('Stopped at {}'.format(datetime.now()))
     msg('Time elapsed: {}'.format(stopped - started))
-
-
-def github_info(hosting_service, service_account):
-    cfg = Config('mongodb.ini')
-    section = hosting_service
-    user_login = None
-    user_password = None
-    try:
-        if service_account:
-            for name, value in cfg.items(section):
-                if name.startswith('login') and value == service_account:
-                    user_login = service_account
-                    index = name[len('login'):]
-                    if index:
-                        user_password = cfg.get(section, 'password' + index)
-                    else:
-                        # login entry doesn't have an index number.
-                        # Might be a config file in the old format.
-                        user_password = value
-                    break
-            # If we get here, we failed to find the requested login.
-            msg('Cannot find "{}" in section {} of config.ini'.format(
-                service_account, section))
-        else:
-            try:
-                user_login = cfg.get(section, 'login1')
-                user_password = cfg.get(section, 'password1')
-            except:
-                user_login = cfg.get(section, 'login')
-                user_password = cfg.get(section, 'password')
-    except Exception as err:
-        msg(err)
-        text = 'Failed to read "login" and/or "password" for {}'.format(
-            section)
-        raise SystemExit(text)
-    return (user_login, user_password)
 
 
 # Plac annotations for main function arguments
@@ -205,7 +169,7 @@ main.__annotations__ = dict(
     print_summary = ('print list of indexed repositories'   ,         'flag',   's'),
     print_ids     = ('print all known repository id numbers',         'flag',   'S'),
     text_lang     = ('detect text languages in description & readme', 'flag',   't'),
-    user          = ('use specified GitHub user login',               'option', 'u'),
+    user          = ('use specified GitHub user account name',        'option', 'u'),
     list_deleted  = ('list deleted entries',                          'flag',   'x'),
     delete        = ('mark specific entries as deleted',              'flag',   'X'),
     repos         = 'one or more repository identifiers or names',
