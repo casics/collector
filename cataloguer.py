@@ -69,6 +69,7 @@ sys.path.append('../comment')
 
 from casicsdb import *
 from utils import *
+from github import *
 from github_indexer import GitHubIndexer
 
 
@@ -129,7 +130,7 @@ def call(action, user, **kwargs):
     # Do each host in turn.  (Currently we handle only GitHub.)
     try:
         # Find out how we log into the hosting service.
-        (github_user, github_password) = casicsdb.login('github', user)
+        (github_user, github_password) = GitHub.login('github', user)
         # Open our Mongo database.
         github_db = casicsdb.open('github')
         # Initialize our worker object.
