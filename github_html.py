@@ -59,6 +59,7 @@ class GitHubHomePage():
         self._num_branches     = None
         self._num_releases     = None
         self._num_contributors = None
+        self._licenses     = None
 
 
     def get_html(self, owner, name, refresh=False):
@@ -113,6 +114,7 @@ class GitHubHomePage():
                     self.num_releases()
                     self.num_branches()
                     self.num_contributors()
+                    self.licenses()
                 break
             self._status_code = r.status_code
             return r.status_code
@@ -472,6 +474,28 @@ class GitHubHomePage():
                     self._num_contributors = self._num_contributors.strip()
                     self._num_contributors = int(self._num_contributors.replace(',', ''))
         return self._num_contributors
+
+
+    def licenses(self, force=False, retry=False):
+        if self.is_problem():
+            self._licenses = None
+        elif (self._licenses == None and self._html) or force:
+            self._licenses = []
+            spanstart = self._html.find('<ul class="numbers-summary">')
+            spanstart = self._html.find('octicon-law', spanstart)
+            if spanstart < 0:
+                return self._licenses
+            marker = '</svg>'
+            marker_len = 6
+            start = self._html.find(marker, spanstart)
+            if start > 0:
+                endpoint = self._html.find('</a>', start + marker_len)
+                licenses = self._html[start + len(marker) : endpoint]
+                # FIXME is there ever more than one?
+                licenses = licenses.strip()
+                if len(licenses) > 0:
+                    self._licenses = [licenses]
+        return self._licenses
 
 
 
