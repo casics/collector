@@ -391,7 +391,7 @@ class GitHubIndexer():
             # We found it via github3 => not deleted.
             msg('{} deleted status set to False'.format(summary))
             updates['is_deleted'] = entry['is_deleted'] = False
-        if entry['is_visible'] != bool(not repo.private):
+        if repo.private != '' and entry['is_visible'] != bool(not repo.private):
             msg('{} visibility changed to {}'.format(summary, not repo.private))
             updates['is_visible'] = entry['is_visible'] = bool(not repo.private)
         if entry['owner'] != repo.owner.login:
@@ -406,10 +406,10 @@ class GitHubIndexer():
                 updates['description'] = entry['description'] = repo.description.strip()
         elif entry['description'] == None:
             updates['description'] = entry['description'] = -1
-        if entry['default_branch'] != repo.default_branch:
+        if repo.default_branch and entry['default_branch'] != repo.default_branch:
             msg('{} default_branch changed to {}'.format(summary, repo.default_branch))
             updates['default_branch'] = entry['default_branch'] = repo.default_branch
-        if entry['homepage'] != repo.homepage:
+        if repo.homepage and entry['homepage'] != repo.homepage:
             msg('{} homepage changed to {}'.format(summary, repo.homepage))
             updates['homepage'] = entry['homepage'] = repo.homepage
 
@@ -432,21 +432,21 @@ class GitHubIndexer():
         if 'repo_created' not in entry['time']:
             entry['time']['repo_created'] = None
             updates['time.repo_created'] = None
-        elif entry['time']['repo_created'] != canonicalize_timestamp(repo.created_at):
+        elif repo.created_at and entry['time']['repo_created'] != canonicalize_timestamp(repo.created_at):
             entry['time']['repo_created']= canonicalize_timestamp(repo.created_at)
             updates['time.repo_created'] = entry['time']['repo_created']
 
         if 'repo_updated' not in entry['time']:
             entry['time']['repo_updated'] = None
             updates['time.repo_updated'] = None
-        elif entry['time']['repo_updated'] != canonicalize_timestamp(repo.updated_at):
+        elif repo.updated_at and entry['time']['repo_updated'] != canonicalize_timestamp(repo.updated_at):
             entry['time']['repo_updated'] = canonicalize_timestamp(repo.updated_at)
             updates['time.repo_updated'] = entry['time']['repo_updated']
 
         if 'repo_pushed' not in entry['time']:
             entry['time']['repo_pushed'] = None
             updates['time.repo_pushed'] = None
-        elif entry['time']['repo_pushed'] != canonicalize_timestamp(repo.pushed_at):
+        elif repo.pushed_at and entry['time']['repo_pushed'] != canonicalize_timestamp(repo.pushed_at):
             entry['time']['repo_pushed'] = canonicalize_timestamp(repo.pushed_at)
             updates['time.repo_pushed'] = entry['time']['repo_pushed']
 
