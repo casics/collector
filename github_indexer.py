@@ -497,6 +497,9 @@ class GitHubIndexer():
             num = len(page.files()) if (page.files() and page.files() != -1) else 0
             msg('added {} files for {}'.format(num, summary))
             updates['files'] = entry['files'] = page.files()
+        if page.licenses() != entry['licenses']:
+            msg('{} licenses set to {}'.format(summary, page.licenses()))
+            updates['licenses'] = entry['licenses'] = page.licenses()
         if page.num_commits() != entry['num_commits']:
             msg('{} num_commits set to {}'.format(summary, page.num_commits()))
             updates['num_commits'] = entry['num_commits'] = page.num_commits()
@@ -761,17 +764,21 @@ class GitHubIndexer():
         msg('Constructing target list...')
         for item in targets:
             count += 1
-            if isinstance(item, int) or item.isdigit():
+            if isinstance(item, str) and item.isdigit():
+                item = int(item)
+            if isinstance(item, int):
+                if item < start_id:
+                    msg('*** skipping {} < start_id = {}'.format(item, start_id))
+                    continue
                 # We can only deal with numbers if we already have the id's
                 # in our database.  Try it.
                 entry = self.db.find_one({'_id': item})
                 if entry:
                     output.append(entry)
                     total += 1
-                    continue
                 else:
                     msg('*** Cannot find id {} -- skipping'.format(item))
-                    continue
+                continue
             elif item.find('/') > 1:
                 owner = item[:item.find('/')]
                 name  = item[item.find('/') + 1:]
@@ -1418,16 +1425,19 @@ class GitHubIndexer():
                 (is_new, entry) = self.add_entry_from_github3(thing, force)
                 if is_new:
                     msg('{} added'.format(e_summary(entry)))
-                return
+                if not prefer_http:
+                    return
 
             # The targets are not github3 objects but rather our database
             # entry dictionaries, which means they're in our database,
             # which means we only do something if we're forcing an update.
-            if not force:
-                msg('Skipping existing entry {}'.format(e_summary(thing)))
+            if entry and not force and not prefer_http:
+                msg('Skipping existing entry {}'.format(e_summary(entry)))
                 return
-            # We're forcing an update of existing database entries.
-            entry = thing
+            # We're forcing an update of existing database entries, or we're
+            # explicitly looking for things in the HTML project GitHub page.
+            if not entry:
+                entry = thing
             if prefer_http:
                 page = GitHubHomePage()
                 status = page.get_html(entry['owner'], entry['name'])
@@ -1448,7 +1458,7 @@ class GitHubIndexer():
                     msg('*** Skipping existing entry {}'.format(e_summary(thing)))
                 self.update_entry_from_github3(entry, repo)
 
-        if targets or start_id:
+        if targets:
             # We have a list of id's or repo paths.
             if force:
                 # Using the force flag only makes sense if we expect that
@@ -1460,6 +1470,10 @@ class GitHubIndexer():
                 # repo id's or paths (or a mix of known and unknown).
                 repo_iterator = self.repo_list
             last_seen = None
+        elif (start_id == 0 or start_id):
+            last_seen = start_id
+            msg('Starting from {}'.format(start_id))
+            repo_iterator = self.github_iterator
         else:
             last_seen = self.last_seen_id()
             if last_seen:
@@ -1658,4 +1672,42 @@ class GitHubIndexer():
         if selected_repos == {}:
             selected_repos = None
         # Note: the selector only has effect when targets are not explicit.
+        self.loop(iterator, body_function, selected_repos, targets, start_id)
+
+
+    def add_licenses(self, targets=None, force=False, prefer_http=False,
+                     start_id=0, **kwargs):
+        def body_function(entry):
+            t1 = time()
+            if entry['licenses'] and entry['licenses'] != -1 and not force:
+                msg('*** {} has licenses -- skipping'.format(e_summary(entry)))
+                return
+
+            # Currently, there is no way to get the license info from GitHub
+            # other than by scraping the HTML from the project page.
+            page = GitHubHomePage()
+            status = page.get_html(entry['owner'], entry['name'])
+            if status >= 400 and status not in [404, 451]:
+                raise UnexpectedResponseException('Getting HTML', status)
+            elif page.is_problem():
+                msg('*** problem with GitHub page for {}'.format(e_summary(entry)))
+            licenses = page.licenses()
+            if licenses:
+                # We don't set licenses to -1 if only using HTTP, as the web
+                # pages don't always contain license info.
+                self.update_entry_field(entry, 'licenses', licenses)
+                msg('{} licenses added to {}'.format(len(licenses), e_summary(entry)))
+
+        def iterator(targets, start_id):
+            fields = ['owner', 'name', 'licenses', 'time', '_id']
+            return self.entry_list(targets, fields, start_id)
+
+        msg('Gathering license data for repositories.')
+        # Set up default selection criteria WHEN NOT USING 'targets'.
+        selected_repos = {'licenses': {"$eq" : []}, 'is_deleted': False,
+                          'is_visible': True}
+        if start_id > 0:
+            msg("Skipping GitHub id's less than {}".format(start_id))
+            selected_repos['_id'] = {'$gte': start_id}
+        # And let's do it.
         self.loop(iterator, body_function, selected_repos, targets, start_id)
