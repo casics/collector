@@ -79,7 +79,7 @@ from github_indexer import GitHubIndexer
 # should hopefully be possible.  See later in this file for the definition
 # of the arguments to main().
 
-def main(api_only=False, create=False, text_lang=False,
+def main(api_only=False, create=False, index_license=False, text_lang=False,
          file=None, force=False, get_files=False, prefer_http=False, id=None,
          lang=None, index_langs=False, print_details=False, print_stats=False,
          index_readmes=False, print_summary=False, print_ids=False,
@@ -112,6 +112,7 @@ def main(api_only=False, create=False, text_lang=False,
     elif create:          call('create_entries',    user=user, **args)
     elif index_langs:     call('add_languages',     user=user, **args)
     elif index_readmes:   call('add_readmes',       user=user, **args)
+    elif index_license:   call('add_licenses',      user=user, **args)
     elif delete:          call('mark_deleted',      user=user, **args)
     elif list_deleted:    call('list_deleted',      user=user, **args)
     elif infer_type:      call('infer_type',        user=user, **args)
@@ -156,6 +157,7 @@ def call(action, user, **kwargs):
 main.__annotations__ = dict(
     api_only      = ('only use the API, without first trying HTTP',   'flag',   'A'),
     create        = ('create database entries by querying GitHub',    'flag',   'c'),
+    index_license = ('index license(s)',                              'flag',   'e'),
     file          = ('use subset of repo names or id\'s from file',   'option', 'f'),
     force         = ('get info even if we know we already tried',     'flag',   'F'),
     get_files     = ('get list of files at GitHub repo top level',    'flag',   'g'),
