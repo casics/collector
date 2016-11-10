@@ -1658,7 +1658,7 @@ class GitHubIndexer():
 
         def iterator(targets, start_id):
             fields = ['description', 'readme', 'text_languages', '_id',
-                      'owner', 'name', 'is_deleted', 'is_visible']
+                      'owner', 'name', 'is_deleted', 'is_visible', 'time']
             return self.entry_list(targets, fields, start_id)
 
         # And let's do it.
