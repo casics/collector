@@ -1427,6 +1427,8 @@ class GitHubIndexer():
                     msg('{} added'.format(e_summary(entry)))
                 if not prefer_http:
                     return
+            else:
+                entry = thing
 
             # The targets are not github3 objects but rather our database
             # entry dictionaries, which means they're in our database,
@@ -1458,6 +1460,7 @@ class GitHubIndexer():
                     msg('*** Skipping existing entry {}'.format(e_summary(thing)))
                 self.update_entry_from_github3(entry, repo)
 
+        last_seen = None
         if targets:
             # We have a list of id's or repo paths.
             if force:
@@ -1469,11 +1472,14 @@ class GitHubIndexer():
                 # to existing entries, so we assume that the targets are new
                 # repo id's or paths (or a mix of known and unknown).
                 repo_iterator = self.repo_list
-            last_seen = None
         elif (start_id == 0 or start_id):
-            last_seen = start_id
             msg('Starting from {}'.format(start_id))
-            repo_iterator = self.github_iterator
+            if prefer_http and force:
+                # Using the force flag only makes sense if we expect that
+                # the entries are in the database already => use entry_list()
+                repo_iterator = self.entry_list
+            else:
+                repo_iterator = self.github_iterator
         else:
             last_seen = self.last_seen_id()
             if last_seen:
