@@ -532,15 +532,23 @@ class GitHubIndexer():
                            {'$set': updates},
                            upsert=False)
         # Fork field is too complicated, and handled separately.
-        if (not entry['fork'] and page.forked_from()):
-            # We don't have it as a fork, but it is.
+        if entry['fork'] == []:
+            # We didn't know either way.
+            # Don't know the root when we're getting the data from this source.
+            # So, we can only update the parent.
+            msg('updated fork info for {}'.format(summary))
+            is_fork = page.forked_from() != False
+            parent = page.forked_from() if page.forked_from() != True else None
+            self.update_entry_fork_field(entry, is_fork, parent, None)
+        elif not entry['fork'] and page.forked_from():
+            # We had it as not-a-fork, but it is.
             # Don't know the root when we're getting the data from this source.
             # So, we can only update the parent.
             msg('updated fork info for {}'.format(summary))
             parent = page.forked_from() if page.forked_from() != True else None
             self.update_entry_fork_field(entry, True, parent, None)
         elif entry['fork'] and page.forked_from() == False:
-            # We had it as a fork, but apparently it's not.
+            # We had it as a fork, or didn't know, but apparently it's not.
             msg('updated fork info for {}'.format(summary))
             self.update_entry_fork_field(entry, False, None, None)
         elif entry['fork'] and page.forked_from() != entry['fork']['parent']:
@@ -577,7 +585,10 @@ class GitHubIndexer():
 
 
     def update_entry_fork_field(self, entry, is_fork, fork_parent, fork_root):
-        if entry['fork'] and not is_fork:
+        if entry['fork'] == []:
+            # We previously didn't know if it's a fork or not.
+            entry['fork'] = make_fork(fork_parent, fork_root) if is_fork else False
+        elif entry['fork'] and not is_fork:
             # We had it as a fork, but it's not.
             entry['fork'] = False
         elif entry['fork']:
