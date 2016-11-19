@@ -94,6 +94,7 @@ class UnexpectedResponseException(Exception):
 
 class GitHubIndexer():
     _max_failures   = 10
+    _max_retries    = 3
 
     def __init__(self, github_login=None, github_password=None, github_db=None):
         self.db        = github_db.repos
@@ -632,7 +633,7 @@ class GitHubIndexer():
         msg('Initial GitHub API calls remaining: ', self.api_calls_left())
         count = 0
         failures = 0
-        retry_after_max_failures = True
+        retries = 0
         start = time()
         # By default, only consider those entries without language info.
         for entry in iterator(targets or selector, start_id=start_id):
@@ -673,12 +674,12 @@ class GitHubIndexer():
                     failures += 1
 
             if failures >= self._max_failures:
-                # Pause & continue once, in case of transient network issues.
-                if retry_after_max_failures:
+                # Try pause & continue, in case of transient network issues.
+                if retries <= self._max_retries:
+                    retries += 1
                     msg('*** Pausing because of too many consecutive failures')
-                    sleep(120)
+                    sleep(300 * retries)
                     failures = 0
-                    retry_after_max_failures = False
                 else:
                     # We've already paused & restarted once.
                     msg('*** Stopping because of too many consecutive failures')
