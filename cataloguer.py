@@ -65,7 +65,7 @@ from time import sleep
 from timeit import default_timer as timer
 
 sys.path.append('../database')
-sys.path.append('../comment')
+sys.path.append('../common')
 
 from casicsdb import *
 from utils import *
