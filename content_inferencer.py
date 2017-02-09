@@ -682,7 +682,6 @@ code_file_extensions = [
     'mdp',
     'mf',
     'mk',
-    'mk',
     'ml',
     'mod',
     'msvc',
@@ -825,6 +824,7 @@ noncode_file_extensions = [
     'wma',
     'wps',
     'xgmml',
+    'xml',
     'yml',
 ]
 
