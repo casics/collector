@@ -696,6 +696,7 @@ code_file_extensions = [
     'pri',
     'prl',
     'pro',
+    'properties',
     'ptx',
     'py',
     'pyc',
