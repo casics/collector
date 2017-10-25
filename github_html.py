@@ -498,6 +498,26 @@ class GitHubHomePage():
         return self._licenses
 
 
+
+# Utilities
+# .............................................................................
+
+def html_encode(s):
+    htmlCodes = (
+        ('&', '&amp;'),
+        ("'", '&#39;'),
+        ('"', '&quot;'),
+        ('>', '&gt;'),
+        ('<', '&lt;'),
+        ('+', '%2B'),
+        (',', '%2C'),
+    )
+    for code in htmlCodes:
+        s = s.replace(code[0], code[1])
+    return s
+
+
+
 
 # # If the repo has been renamed, we may have gotten here using
 # # an name.  First try to get the current name.
