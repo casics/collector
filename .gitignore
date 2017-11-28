@@ -1,15 +1,69 @@
-# -*- mode: gitignore; -*-
+# -*- mode: sh-mode; -*-
 
-# Ignore python compiled files.
-*.pyc
+# Compiled source
+# .............................................................................
 
-# Ignore the database itself, because it's very large and
-# doeesn't need to be in git.
-data.fs
-data.fs.index
-data.fs.lock
-data.fs.tmp
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
 
-# Other misc files.
-.cache
+# Compressed archives & package files
+# .............................................................................
 
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# OS-specific things to ignore:
+# .............................................................................
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Emacs-specific things to ignore:
+# .............................................................................
+
+*~
+.#*
+.git/COMMIT_EDITMSG
+auto
+*.synctex.gz
+TAGS
+
+# LaTeX-specific things to ignore:
+# .............................................................................
+
+*.aux
+*.log
+*.bbl
+*.blg
+*.out
+*.toc
+*.loc
+*.mp
+
+# Python-specific things to ignore:
+# .............................................................................
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Project-specific things to ignore:
+# .............................................................................
+
+build
+dist
